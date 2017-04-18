@@ -4,6 +4,7 @@ import argparse
 import datetime
 import json
 import os
+import socket
 import subprocess
 import sys
 
@@ -19,10 +20,14 @@ args = parser.parse_args()
 specs = {}
 
 
+HOSTNAME = socket.gethostname()
+ROOT_VOLUME = 'columbia/backup' if HOSTNAME.startswith('nx01') else 'crazyhorse/backup'
+
+
 # Supervisors.
 for name in 'rf40.mm', 'su01.mm', 'su02.mm':
     specs[name] = dict(
-        volume='crazyhorse/backup/%s' % name,
+        volume=name,
         excludes='''
             /tmp
             /var/tmp
@@ -36,7 +41,7 @@ for name in 'rf40.mm', 'su01.mm', 'su02.mm':
 # Public internet.
 for name in 'tokyo', 'oxford', 'hobby', 'museum':
     specs['%s.mminternals.com' % name] = dict(
-        volume='crazyhorse/backup/mminternals/%s' % name,
+        volume='mminternals/%s' % name,
         excludes='''
             /tmp
             /var/tmp
@@ -60,7 +65,7 @@ for name in '''
     specs['terrablock.mm/%s' % name.lower()] = dict(
         host='gx01.mm',
         src_path='/media/%s' % name,
-        volume='crazyhorse/backup/terrablock/%s' % name,
+        volume='terrablock/%s' % name,
         pre_command=[
             'ssh', 'gx01.mm',
             ('sudo /usr/lib/terrablock/CommandApp -i terrablock.mm -u mmconfig -m {name}; ' + 
@@ -76,18 +81,23 @@ for name in '''
         host=None,
         src_path='/Volumes/%s.qnap' % name,
         pre_mount=('nfs', 'qnap.mm:%s' % name, '/Volumes/%s.qnap' % name),
-        volume='crazyhorse/backup/qnap/%s' % name,
+        volume='qnap/%s' % name,
     )
 
-# windows.mm
-for name in '''
-    ACroot
-'''.strip().split():
-    specs['windows.mm/%s' % name] = dict(
+
+# SMB.
+for host, cifs_host, name in [
+    ('windows.mm', None,        'ACroot'),
+    ('dcfc.mm',    '10.10.1.5', 'MAS_DCFC_D01'),
+    ('dcfc.mm',    '10.10.1.5', 'MAS_DCFC_D02'),
+    ('bcfs.mm',    '10.10.1.9', 'MAS_BCFS_D01'),
+    ('bcfs.mm',    '10.10.1.9', 'MAS_BCFS_D02'),
+]:
+    specs['%s/%s' % (host, name)] = dict(
             host=None,
-            src_path='/Volumes/%s.windows' % name,
-            pre_mount=('cifs', '-o', 'credentials=~/.smb/windows.mm', '//windows.mm/%s' % name, '/Volumes/%s.windows' % name),
-            volume='crazyhorse/backup/windows.mm/%s' % name,
+            src_path='/Volumes/%s.%s' % (name, host),
+            pre_mount=('cifs', '-o', 'credentials=%s/.smb/%s' % (os.path.expanduser('~'), host), '//%s/%s' % (cifs_host or host, name), '/Volumes/%s.%s' % (name, host)),
+            volume='%s/%s' % (host, name),
     )
 
 if args.list:
@@ -139,7 +149,7 @@ if pre_command:
             exit(pre_retcode)
 
 
-volume = os.path.normpath(spec['volume']).strip('/')
+volume = os.path.join(ROOT_VOLUME, os.path.normpath(spec['volume'])).strip('/')
 dst_path = os.path.join('/mnt', volume)
 
 if not os.path.exists(dst_path):

@@ -1,0 +1,219 @@
+#!/usr/bin/env python
+
+import argparse
+import datetime
+import json
+import os
+import subprocess
+import sys
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-l', '--list', action='store_true')
+parser.add_argument('-n', '--dry-run', action='store_true')
+parser.add_argument('-v', '--verbose', action='store_true')
+parser.add_argument('name', nargs='?')
+args = parser.parse_args()
+
+
+specs = {}
+
+
+# Supervisors.
+for name in 'rf40.mm', 'su01.mm', 'su02.mm':
+    specs[name] = dict(
+        volume='crazyhorse/backup/%s' % name,
+        excludes='''
+            /tmp
+            /var/tmp
+            /usr/local/vee
+            /var/log/lastlog
+            /var/lib/docker/devicemapper/devicemapper/data
+        '''.strip().split(),
+    )
+
+
+# Public internet.
+for name in 'tokyo', 'oxford', 'hobby', 'museum':
+    specs['%s.mminternals.com' % name] = dict(
+        volume='crazyhorse/backup/mminternals/%s' % name,
+        excludes='''
+            /tmp
+            /var/tmp
+            /var/log/lastlog
+        '''.strip().split(),
+    )
+
+# Terrablock.
+for name in '''
+    BBQ_Ingest1
+    BBQ_Projects
+    CWAF_Ingest1
+    CWAF_Ingest2
+    CWAF_Ingest3
+    CWAF_Ingest4
+    CWAF_Projects
+    TEST
+    Backup_Test
+    RENDER
+'''.strip().split():
+    specs['terrablock.mm/%s' % name.lower()] = dict(
+        host='gx01.mm',
+        src_path='/media/%s' % name,
+        volume='crazyhorse/backup/terrablock/%s' % name,
+        pre_command=[
+            'ssh', 'gx01.mm',
+            ('sudo /usr/lib/terrablock/CommandApp -i terrablock.mm -u mmconfig -m {name}; ' + 
+             'mount | grep -q "/media/{name} "').format(name=name)
+        ]
+    )
+
+# QNAP.
+for name in '''
+    digital_media
+'''.strip().split():
+    specs['qnap.mm/%s' % name] = dict(
+        host=None,
+        src_path='/Volumes/%s.qnap' % name,
+        pre_mount=('nfs', 'qnap.mm:%s' % name, '/Volumes/%s.qnap' % name),
+        volume='crazyhorse/backup/qnap/%s' % name,
+    )
+
+# windows.mm
+for name in '''
+    ACroot
+'''.strip().split():
+    specs['windows.mm/%s' % name] = dict(
+            host=None,
+            src_path='/Volumes/%s.windows' % name,
+            pre_mount=('cifs', '-o', 'credentials=~/.smb/windows.mm', '//windows.mm/%s' % name, '/Volumes/%s.windows' % name),
+            volume='crazyhorse/backup/windows.mm/%s' % name,
+    )
+
+if args.list:
+    for name in sorted(specs):
+        print name
+    exit(0)
+
+
+
+
+spec = specs.get(args.name)
+if not spec:
+    print >> sys.stderr, 'No backup known by name', repr(args.name)
+    exit(1)
+
+
+pre_mount = spec.get('pre_mount')
+if pre_mount:
+    mount_src = pre_mount[-2]
+    mount_point = pre_mount[-1]
+    if not os.path.exists(mount_point):
+        if args.verbose:
+            print >> sys.stderr, 'sudo mkdir -p', mount_point
+        code = subprocess.call(['sudo', 'mkdir', '-p', mount_point])
+        if code:
+            print >> sys.stderr, 'Pre-mount mkdir failed with code', code
+            exit(code)
+    mounts = subprocess.check_output(['mount'])
+    needle = '%s on %s' % (mount_src, mount_point)
+    if needle not in mounts:
+        cmd = ['sudo', 'mount', '-t']
+        cmd.extend(pre_mount)
+        if args.verbose:
+            print >> sys.stderr, ' '.join(cmd)
+        code = subprocess.call(cmd)
+        if code:
+            print >> sys.stderr, 'Pre-mount failed with code', code
+            exit(code)
+
+
+pre_command = cmd = spec.get('pre_command')
+if pre_command:
+    if args.verbose:
+        print >> sys.stderr, ' '.join(cmd)
+    if not args.dry_run:
+        pre_retcode = subprocess.call(cmd)
+        if pre_retcode:
+            print >> sys.stderr, 'Pre-command failed with code', pre_retcode
+            exit(pre_retcode)
+
+
+volume = os.path.normpath(spec['volume']).strip('/')
+dst_path = os.path.join('/mnt', volume)
+
+if not os.path.exists(dst_path):
+    print >> sys.stderr, 'Dest path does not exist:', dst_path
+    exit(2)
+
+host = spec.get('host', args.name)
+src_path = spec.get('src_path', '/').rstrip('/')
+if host:
+    src = 'mmbackup@%s:%s/' % (host, src_path)
+else:
+    src = src_path + '/'
+dst = dst_path + '/'
+
+rsync_command = cmd = ['sudo', 'rsync',
+    '-e', 'ssh -i ~mmbackup/.ssh/id_rsa',
+    '--rsync-path', 'sudo rsync',
+    '-ax',
+    '--delete',
+    '--delete-excluded',
+]
+
+if args.verbose:
+    cmd.extend(('-v', '--progress'))
+
+for path in spec.get('excludes', ()):
+    cmd.extend(('--exclude', path))
+cmd.extend((src, dst))
+
+if args.verbose:
+    print >> sys.stderr, ' '.join(cmd)
+
+start_time = datetime.datetime.now()
+if not args.dry_run:
+    rsync_retcode = subprocess.call(cmd)
+else:
+    rsync_retcode = None
+end_time = datetime.datetime.now()
+
+snapshot = volume + '@' + end_time.strftime('%Y-%m-%dT%H:%M:%S')
+zfs_command = cmd = ['sudo', 'zfs', 'snapshot', snapshot]
+
+if args.verbose:
+    print >> sys.stderr, ' '.join(cmd)
+
+if not args.dry_run:
+    zfs_retcode = subprocess.call(cmd)
+else:
+    zfs_retcode = None
+
+
+log = json.dumps(dict(
+    name=args.name,
+    host=host,
+    start_time=start_time.isoformat('T'),
+    end_time=end_time.isoformat('T'),
+    spec=spec,
+    rsync_command=rsync_command,
+    rsync_retcode=rsync_retcode,
+    volume=volume,
+    src_path=src_path,
+    dst_path=dst_path,
+    snapshot=snapshot,
+    zfs_command=zfs_command,
+    zfs_retcode=zfs_retcode,
+), sort_keys=True, indent=4)
+
+if args.dry_run or args.verbose or rsync_retcode or zfs_retcode:
+    print log
+
+if not args.dry_run:
+    with open('/var/lib/mmbackup/log/%s,%s' % (args.name.replace('/', '-'), start_time.strftime('%Y-%m-%dT%H:%M:%S')), 'w') as fh:
+        fh.write(log)
+
+exit(rsync_retcode or zfs_retcode or 0)
+
+

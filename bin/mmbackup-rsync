@@ -25,7 +25,13 @@ ROOT_VOLUME = 'columbia/backup' if HOSTNAME.startswith('nx01') else 'crazyhorse/
 
 
 # Supervisors.
-for name in 'rf40.mm', 'su01.mm', 'su02.mm':
+for name in '''
+    rf40.mm
+    su01.mm
+    su02.mm
+    su04.288.mm
+    su05.288.mm
+'''.strip().split():
     specs[name] = dict(
         volume=name,
         excludes='''
@@ -57,6 +63,7 @@ for name in '''
     CWAF_Ingest2
     CWAF_Ingest3
     CWAF_Ingest4
+    CWAF_S3_Ingest
     CWAF_Projects
     TEST
     Backup_Test

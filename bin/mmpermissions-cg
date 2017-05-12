@@ -1,0 +1,42 @@
+#!/usr/bin/env python
+import argparse
+import os
+import grp
+parser = argparse.ArgumentParser()
+parser.add_argument('-n', '--dry-run', action='store_true')
+parser.add_argument('-v', '--verbose', action='store_true')
+parser.add_argument('root')
+
+args = parser.parse_args()
+
+#root = '/Volumes/CGroot/Projects/test'
+cg_gid = grp.getgrnam('cg').gr_gid
+
+
+def check_perms(path, is_dir):
+    wanted_perms = 0770 if is_dir else 0660
+    existed_perms = stat.S_IMODE(os.stat(path).st_mode)
+    has_perms = (existed_perms & wanted_perms) 
+    if has_perms != wanted_perms:
+        if args.vebose: 
+            print "changing permissions to ", wanted_perms
+        if not args.dry_run: 
+            os.chmod(path, wanted_perms | existed_perms)
+
+    if os.stat(path).st_gid != cg_gid:
+       if args.verbose:
+           print "changing ownership to ", cg_gid
+           if not args.dry_run:
+                os.chown(path, -1, cg_gid)
+                
+
+
+for dir_path, dir_names, file_names in os.walk(root):
+    dir_names[:] = [x for x in dir_names if not x.startswith('._')]
+    file_names = [x for x in file_names if not x.startswith('.')]
+    for dir_name in dir_names:
+        d_path = os.path.join(dir_path, dir_name) 
+        checkPerms(d_path, True)
+    for file_name in file_names: 
+        f_path = os.path.join(dir_path, file_name)
+        checkPerms(f_path, False)

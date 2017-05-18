@@ -1,0 +1,39 @@
+#!/usr/bin/env python
+
+import argparse
+import re
+import subprocess
+import sys
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-i', '--interface', required=True)
+parser.add_argument('-e', '--ether', required=True)
+args = parser.parse_args()
+
+
+# Inspect existing.
+proc = subprocess.Popen(['ip', 'link', 'show', args.interface], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+out, err = proc.communicate()
+
+if proc.returncode:
+    exists = correct = False
+else:
+    exists = True
+    m = re.search(r'ether (..:..:..:..:..:..)', out)
+    if not m:
+        print >> sys.stderr, 'Could not parse `ip link show %s` output.' % args.interface
+        exit(1)
+    ether = m.group(1)
+    correct = args.ether.lower() == ether.lower()
+
+
+if not exists:
+    print 'Creating dummy interface', args.interface
+    subprocess.check_call(['sudo', 'modprobe', 'dummy'])
+    subprocess.check_call(['sudo', 'ip', 'link', 'add', args.interface, 'type', 'dummy'])
+if not correct:
+    print 'Setting ether on', args.interface, 'to', args.ether
+    subprocess.check_call(['sudo', 'ifconfig', args.interface, 'hw', 'ether', args.ether])
+
+print 'Done'
+

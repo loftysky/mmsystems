@@ -1,0 +1,271 @@
+from __future__ import print_function
+
+import argparse
+import math
+import os
+import random
+import re
+import sys
+import threading
+import time
+from subprocess import check_call
+from multiprocessing import Process, Queue
+
+CSI = '\x1b['
+red  = lambda x: CSI + '31m' + x + CSI + '0m'
+blue = lambda x: CSI + '34m' + x + CSI + '0m'
+
+
+_sizes = {
+    'B': 1,
+    'KB': 1000,
+    'KiB': 1024,
+    'MB': 1000**2,
+    'MiB': 1024**2,
+    'GB': 1000**3,
+    'GiB': 1024**3,
+    'TB': 1000**4,
+    'TiB': 1024**4,
+}
+
+def parse_size(x):
+    if x is None:
+        return
+    if x.isdigit():
+        return int(x)
+    m = re.match(r'^(\d+)((?:[EPTGMK]i?)?B)$', x)
+    if m:
+        r_num, unit = m.groups()
+        return int(r_num) * _sizes[unit]
+    else:
+        raise ValueError('bad size', x)
+
+def format_size(x, binary=True):
+    x = float(x)
+    order = 0
+    base = 1024 if binary else 1000
+    while x > base:
+        order += 1
+        x /= base
+    return '%.1f%s%sB' % (x, ('', 'K', 'M', 'G', 'T')[order], 'i' if binary else '')
+
+def stderr(*args):
+    toprint = ' '.join(str(x) for x in args) + '\n'
+    print(toprint, file=sys.stderr, end='')
+
+def verbose(*a):
+    if args.verbose:
+        stderr(*a)
+
+
+class Tracker(object):
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.start_time = self.last_report_time = time.time()
+        self.total_bytes = 0
+        self.unreported_bytes = 0
+
+    def add(self, bytes):
+        self.total_bytes += bytes
+        self.unreported_bytes += bytes
+
+    def speed(self, unreported=False, now=None):
+        now = now or time.time()
+        if unreported:
+            return float(self.unreported_bytes) / (now - self.last_report_time)
+        else:
+            return float(self.total_bytes) / (now - self.start_time)
+
+    def maybe_report(self, duration):
+        now = time.time()
+        elapsed = now - self.last_report_time
+        if elapsed > duration:
+            speed = self.speed(True, now)
+            verbose('    %s/s' % format_size(speed))
+            self.last_report_time = now
+            self.unreported_bytes = 0
+            return speed
+
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('-v', '--verbose', action='count', default=0)
+
+parser.add_argument('-C', '--root', default='.',
+    help='directory in which to test')
+parser.add_argument('--basename', default='slug',
+    help='basename of files to write')
+parser.add_argument('-n', '--name',
+    help='name for CSV output')
+
+parser.add_argument('--pooltype', choices=['zero', 'random'], default='zero',
+    help='what type of data to write')
+parser.add_argument('--poolsize', type=int, default=4,
+    help='how large a pool to prepare (for "random" pools)')
+
+parser.add_argument('-b', '--blocksize', type=parse_size, default='16MiB')
+parser.add_argument('-c', '--count', type=int, default=64,
+    help='number of blocks to write')
+
+
+parser.add_argument('-w', '--write', action='store_true',
+    help='perform the write test')
+parser.add_argument('-r', '--read', action='store_true',
+    help='perform the read test')
+parser.add_argument('-f', '--flush', action='store_true',
+    help='flush the OS cache between tests')
+
+parser.add_argument('-N', '--num', type=int, default=1,
+    help='number of runs')
+parser.add_argument('-F', '--filenum', type=int, default=0,
+    help='number of small files')
+parser.add_argument('-t', '--threads', type=int, default=1,
+    help='number of threads')
+parser.add_argument('-i', '--interval', type=float, default=5.0,
+    help='seconds bettween samples')
+parser.add_argument('-T', '--real-threads', action='store_true')
+parser.add_argument('--sleep', type=float, default=1.0,
+    help='seconds to sleep between runs')
+
+args = parser.parse_args()
+
+args.name = args.name or os.path.basename(os.path.abspath(args.root))
+
+if args.flush and os.getuid():
+    stderr("Must be root to --flush")
+    exit(1)
+if not (args.write or args.read or args.flush):
+    stderr("Must have at least one of -r/--read or -w/--write or -f/--flush")
+    exit(2)
+
+
+# Prepare the pools.
+if args.write:
+    if args.pooltype == 'zero':
+        pool = ['\0' * args.blocksize]
+    else:
+        stderr('Populating random pool with', args.poolsize, 'blocks of', format_size(args.blocksize))
+        pool = []
+        for i in xrange(args.poolsize):
+            pool.append(os.urandom(args.blocksize))
+        stderr('Done.')
+
+
+def write_target(path, queue):
+    verbose('Writing', args.count, 'blocks of', format_size(args.blocksize), 'to', path)
+    for fi in xrange(args.filenum or 1):
+        fh = open(path + ('.%d' % fi if args.filenum else ''), 'wb')
+        for i in xrange(args.count):
+            block = pool[i % len(pool)]
+            fh.write(block)
+            fh.flush()
+            queue.put(len(block))
+    verbose('Syncing', path)
+    fh.close()
+    queue.put(None)
+
+def read_target(path, queue):
+    verbose('Reading in blocks of', format_size(args.blocksize))
+    for fi in xrange(args.filenum or 1):
+        fh = open(path + ('.%d' % fi if args.filenum else ''), 'rb')
+        while True:
+            x = fh.read(args.blocksize)
+            if not x:
+                break
+            queue.put(len(x))
+    queue.put(None)
+
+def run_test(mode, target, num_threads=args.threads):
+
+    tracker = Tracker()
+    queue = Queue()
+
+    procs = []
+    for proc_i in xrange(num_threads):
+        path = os.path.join(args.root, args.basename + str(proc_i))
+        proc = (threading.Thread if args.real_threads else Process)(target=target, args=[path, queue])
+        proc.start()
+        procs.append(proc)
+
+    alive = num_threads
+    while alive:
+        x = queue.get()
+        if x is None:
+            alive -= 1
+        else:
+            tracker.add(x)
+            speed = tracker.maybe_report(duration=args.interval)
+            if speed is not None and args.num == 1:
+                speeds.append((mode, speed))
+
+    for proc in procs:
+        proc.join()
+
+    if mode == 'write' and args.flush:
+        verbose("Flushing OS Cache")
+        check_call(['sync'])
+        with open('/proc/sys/vm/drop_caches', 'w') as fh:
+            fh.write('3')
+        fh.close()
+
+    speed = tracker.speed(unreported=args.num == 1)
+    speeds.append((mode, speed))
+
+    speed = tracker.speed() # Just for reporting.
+    stderr('%s %d/%d at %s' % (mode.title(), run_i + 1, args.num, format_size(speed)))
+
+
+speeds = []
+for run_i in xrange(args.num):
+
+    verbose("Starting run %d/%s" % (run_i + 1, args.num))
+
+    if args.write:
+        run_test('write', write_target)
+
+    if args.write and args.read and args.sleep:
+        verbose("Sleeping")
+        time.sleep(args.sleep)
+
+    if args.read:
+        run_test('read', read_target)
+
+
+def report_on_speeds(speeds):
+
+    if not speeds:
+        return 0, 0, 0, 0, 0, 0, 0
+
+    speeds = sorted(speeds)
+    speeds = [s / 1024 / 1024 for s in speeds] # MB/s
+    mean = sum(speeds) / len(speeds)
+    devs = [(x - mean)**2 for x in speeds]
+    variance = sum(devs) / len(devs)
+    sd = math.sqrt(variance)
+    return (
+        speeds[min(len(speeds), len(speeds) * 10 / 100)],
+        speeds[min(len(speeds), len(speeds) * 25 / 100)],
+        speeds[min(len(speeds), len(speeds) * 50 / 100)],
+        speeds[min(len(speeds), len(speeds) * 75 / 100)],
+        speeds[min(len(speeds), len(speeds) * 90 / 100)],
+        mean,
+        sd,
+    )
+
+
+stderr(
+    'name,threads,blocksize,blockcount,runs,files,'
+    'write_10p,write_25p,write_50p,write_75p,write_90p,write_mean,write_sd,'
+    'read_10p,read_25p,read_50p,read_75p,read_90p,read_mean,read_sd'
+)
+
+writes = report_on_speeds([speed for mode, speed in speeds if mode == 'write'])
+reads = report_on_speeds([speed for mode, speed in speeds if mode == 'read'])
+print(
+    '%s,%d,%s,%d,%d,%d,'
+    '%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,'
+    '%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f' % ((
+    args.name, args.threads, format_size(args.blocksize), args.count, args.num, args.filenum) + writes + reads))

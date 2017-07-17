@@ -19,7 +19,8 @@ setup(
 
     entry_points={
         'console_scripts': '''
-            mmsys-fs-list = mmsystems.fs.list:main
+            mmsystems-fileservers = mmsystems.fileservers:main
+            mmarchive-ingest = mmsystems.archive:ingest_main
         ''',
     },
 

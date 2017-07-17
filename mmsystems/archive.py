@@ -95,7 +95,7 @@ def ingest_main():
 
         args.description = args.description or existing.get('description')
 
-    if not args.description and not args.yes:
+    if args.description is None and not args.yes:
         description = [raw_input("Description (enter blank line to finish): ").strip()]
         while description[-1]:
             description.append(raw_input().rstrip())

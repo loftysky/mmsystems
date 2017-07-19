@@ -91,23 +91,26 @@ def ingest_main():
 
         print("Archive already exists.", file=sys.stderr)
 
-        existing = list(yaml.load_all(open(meta_path).read()))[0]
-        version = existing['version']
+        existing_metadata = list(yaml.load_all(open(meta_path).read()))[0]
+        version = existing_metadata['version']
         if version != 1:
             raise ValueError("Unknown metadata version.", version)
 
+        # Get the existing serial number.
         try:
-            existing_smart = existing.get('serial_number') or parse_smart(open(smart_pattern.format('a')).read())
+            existing_smart = parse_smart(open(smart_pattern.format('a')).read())
         except IOError as e:
-            existing_smart = ''
+            existing_serial = existing_metadata.get('serial_number')
+        else:
+            existing_serial = existing_smart['serial number']
 
-        if serial_number and existing_serial_number != serial_number:
-            print("Existing archive is for another drive: {}".format(existing_serial_number), file=sys.stderr)
+        if serial_number and existing_serial and existing_serial != serial_number:
+            print("Existing archive is for another drive: {}".format(existing_serial), file=sys.stderr)
             if not args.force:
                 print("Cannot continue without --force.", file=sys.stderr)
                 exit(1)
 
-        args.description = args.description or existing.get('description')
+        args.description = args.description or existing_metadata.get('description')
 
     if args.description is None and not args.yes:
         description = [raw_input("Description (enter blank line to finish): ").strip()]

@@ -53,15 +53,26 @@ def ingest_main():
     device = src_mount.device
     device = re.sub(r'(/dev/sd[a-z]+)\d*$', r'\1', device) # Linux
     device = re.sub(r'(/dev/disk\d+)(?:s\d+)?$', r'\1', device) # macOS
-    smart_a = subprocess.check_output(['smartctl', '-a', device])
-    # The next one is allowed to fail.
-    smart_x = subprocess.Popen(['smartctl', '-x', device], stdout=subprocess.PIPE).communicate()[0]
-    smart = parse_smart(smart_a)
+    
+    try:
+        smart_a = subprocess.check_output(['smartctl', '-a', device])
+    except subprocess.CalledProcessError:
+        print("WARNING: Cannot fetch SMART data!", file=sys.stderr)
+        print("Enter the serial number (or enter to continue without): ", end='', file=sys.stderr)
+        serial_number = raw_input().strip()
+        has_smart = False
+    else:
+        # The next one is allowed to fail.
+        smart_x = subprocess.Popen(['smartctl', '-x', device], stdout=subprocess.PIPE).communicate()[0]
+        smart = parse_smart(smart_a)
+        serial_number = smart['serial number']
+        has_smart = True
 
     # Restore the name from serial number.
-    by_serial_link = os.path.join(dst_root, '__by_serial__', smart['serial number'])
-    if not args.name and os.path.exists(by_serial_link):
-        args.name = os.path.basename(os.readlink(by_serial_link))
+    if serial_number:
+        by_serial_link = os.path.join(dst_root, '__by_serial__', serial_number)
+        if not args.name and os.path.exists(by_serial_link):
+            args.name = os.path.basename(os.readlink(by_serial_link))
 
     if not args.name and not args.yes:
         default = os.path.basename(args.root)
@@ -85,10 +96,13 @@ def ingest_main():
         if version != 1:
             raise ValueError("Unknown metadata version.", version)
 
-        existing_smart = parse_smart(open(smart_pattern.format('a')).read())
+        try:
+            existing_smart = existing.get('serial_number') or parse_smart(open(smart_pattern.format('a')).read())
+        except IOError as e:
+            existing_smart = ''
 
-        if existing_smart['serial number'] != smart['serial number']:
-            print("Existing archive is for another drive: {}".format(existing_smart['serial number']), file=sys.stderr)
+        if serial_number and existing_serial_number != serial_number:
+            print("Existing archive is for another drive: {}".format(existing_serial_number), file=sys.stderr)
             if not args.force:
                 print("Cannot continue without --force.", file=sys.stderr)
                 exit(1)
@@ -108,19 +122,21 @@ def ingest_main():
             'version': 1,
             'name': args.name,
             'description': args.description.strip(),
+            'serial_number': serial_number,
         },
             explicit_start=False,
             indent=4,
             default_flow_style=False
         ))
 
-    with open(smart_pattern.format('a'), 'wb') as fh:
-        fh.write(smart_a)
-    with open(smart_pattern.format('x'), 'wb') as fh:
-        fh.write(smart_x)
+    if has_smart:
+        with open(smart_pattern.format('a'), 'wb') as fh:
+            fh.write(smart_a)
+        with open(smart_pattern.format('x'), 'wb') as fh:
+            fh.write(smart_x)
 
     # Create the serial link.
-    if not os.path.exists(by_serial_link):
+    if serial_number and not os.path.exists(by_serial_link):
         makedirs(os.path.dirname(by_serial_link))
         os.symlink(dst_dir, by_serial_link)
 

@@ -19,8 +19,14 @@ setup(
 
     entry_points={
         'console_scripts': '''
-            mmsystems-fileservers = mmsystems.fileservers:main
+
             mmarchive-ingest = mmsystems.archive:ingest_main
+
+            mmfileservers-status = mmsystems.fileservers:main
+
+            mminflux-query = mmsystems.influx:main_query
+            mminflux-write = mmsystems.influx:main_write
+
         ''',
     },
 

@@ -24,8 +24,8 @@ setup(
 
             mmfileservers-status = mmsystems.fileservers:main
 
-            mminflux-query = mmsystems.influx:main_query
-            mminflux-write = mmsystems.influx:main_write
+            mminflux-query = mmsystems.metrics.influx:main_query
+            mminflux-write = mmsystems.metrics.influx:main_write
 
         ''',
     },

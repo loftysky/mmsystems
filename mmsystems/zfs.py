@@ -99,5 +99,41 @@ def zpool_list(input_=None):
 
 
 
+def iter_generic_stats(name):
+    with open(os.path.join(ROOT, name), 'rb') as fh:
+        fh.next() # Skip pre-header.
+        fh.next() # Skip header.
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split()
+            name = parts[0]
+            value = parts[-1]
+            yield name, int(value)
+
+def iter_pool_stats(name):
+    with open(os.path.join(ROOT, name, 'io'), 'rb') as fh:
+        fh.next() # Skip the header.
+        names = fh.next().strip().split()
+        values = map(int, fh.next().strip().split())
+        return zip(names, values)
+
+def iter_pools():
+    for name in os.listdir(ROOT):
+        path = os.path.join(ROOT, name, 'io')
+        if os.path.exists(path):
+            yield name
+
+def iter_all_stats():
+    """Iter 3-tuples for :func:`mmsystems.influx.format_line`."""
+    yield 'zfs.arc', {}, iter_generic_stats('/proc/spl/kstat/zfs/arcstats')
+    yield 'zfs.zil', {}, ((name[4:], value) for name, value in iter_generic_stats('/proc/spl/kstat/zfs/zil'))
+    for pool in iter_pools():
+        yield 'zfs.io', {'pool': pool}, iter_pool_stats(pool)
+
+
+
+
 
 

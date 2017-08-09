@@ -1,0 +1,131 @@
+#!/usr/bin/env python
+
+import argparse
+import datetime
+import os
+import subprocess
+import re
+
+import psutil
+
+
+volume_names = '''
+    BBQ_Ingest1
+    BBQ_Projects
+    CWAF_Ingest1
+    CWAF_Ingest2
+    CWAF_Ingest3
+    CWAF_Ingest4
+    CWAF_Projects
+    CWAF_S3_Ingest
+    RENDER
+'''.strip().split()
+
+
+mountpoints = set()
+def refresh_mounts():
+    for mount in psutil.disk_partitions(True):
+        mountpoints.add(mount.mountpoint)
+refresh_mounts()
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-m', '--min-age', type=int, default=3600)
+parser.add_argument('-n', '--dry-run', action='store_true')
+parser.add_argument('-v', '--verbose', action='store_true')
+parser.add_argument('names', nargs='*')
+args = parser.parse_args()
+
+if args.names:
+    for name in args.names:
+        if name not in volume_names:
+            print "Unknown volume:", name
+            exit(1)    
+    
+dst_mount = '/Volumes/Terrablock.bak'
+if dst_mount not in mountpoints:
+    if args.verbose:
+        print 'Mounting', dst_mount
+    subprocess.check_call([
+        'sudo',
+        'mount',
+        '-t', 'nfs',
+        'qnap.mm:Terrablock.bak',
+        dst_mount,
+    ])
+    refresh_mounts()
+    if dst_mount not in mountpoints:
+        print 'Could not find', dst_mount
+        exit(1)
+
+
+now = datetime.datetime.utcnow().replace(microsecond=0)
+now_str = now.isoformat('T')
+
+for vname in (args.names or volume_names):
+   
+    print vname
+
+    src = os.path.join('/media', vname)
+    if src not in mountpoints:
+        if args.verbose:
+            print 'Mounting', src
+        env = os.environ.copy()
+        env['LD_LIBRARY_PATH'] = '/lib'
+        subprocess.check_call([
+            'sudo',
+            '/usr/lib/terrablock/CommandApp',
+            '-i', 'terrablock.mm',
+            '-u', 'mmconfig',
+            '-m', vname,
+        ], env=env)
+        refresh_mounts()
+        if src not in mountpoints:
+            print 'Could not find', src
+            exit(1)
+
+    dst_root = os.path.join(dst_mount, vname)
+    for name in sorted(os.listdir(dst_root), reverse=True):
+        if name.startswith('.'):
+            continue
+        m = re.match(r'(\d{4})-(\d{2})-(\d{2})(?:[T -](\d{2})[:-](\d{2})[:-](\d{2}))?(.*)$', name)
+        if not m:
+            print 'Could not parse name:', os.path.join(dst_root, name)
+            continue
+        if m.groups()[6]:
+            continue
+        last_time = datetime.datetime(*(int(x) if x else 0 for x in m.groups()[:6]))
+        break
+    else:
+        print 'No seed exists in', dst_root
+        exit(2)
+    if (now - last_time).total_seconds() < args.min_age:
+        print 'Previous backup is very recent; skipping.'
+        continue
+    last = os.path.join(dst_root, name)
+    
+    dst = os.path.join(dst_mount, vname, now_str)
+    tmp = dst + '.in-progress'
+    if not args.dry_run:
+        os.makedirs(tmp)
+
+    cmd = ['rsync']
+    if args.verbose:
+        cmd.append('-v')
+    cmd.extend((
+        '-rltH',
+        '-x',
+        '--perms', # So that the below chmod is always applied.
+        '--chmod', 'Dug=rx,Fug=r,o=',
+        '--link-dest', last,
+        src + '/',
+        tmp + '/',
+    ))
+
+    if args.verbose:
+        print '$', ' '.join(cmd)
+    
+    if not args.dry_run:
+        code = subprocess.call(cmd)
+        os.rename(tmp, dst)
+

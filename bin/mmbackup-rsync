@@ -24,23 +24,42 @@ HOSTNAME = socket.gethostname()
 ROOT_VOLUME = 'columbia/backup' if HOSTNAME.startswith('nx01') else 'crazyhorse/backup'
 
 
+supe_excludes='''
+    /media
+    /mnt
+    /tmp
+    /var/tmp
+    /usr/local/vee
+    /var/log/lastlog
+    /var/lib/docker/devicemapper/devicemapper/data
+    /Volumes
+'''.strip().split()
+
 # Supervisors.
 for name in '''
     rf40.mm
     su01.mm
     su02.mm
-    su04.288.mm
-    su05.288.mm
+    rpi01.mm
+    nx01.mm
+    nx02.mm
 '''.strip().split():
     specs[name] = dict(
-        volume=name,
-        excludes='''
-            /tmp
-            /var/tmp
-            /usr/local/vee
-            /var/log/lastlog
-            /var/lib/docker/devicemapper/devicemapper/data
-        '''.strip().split(),
+        volume='supervisors/%s' % name,
+        excludes=supe_excludes,
+    )
+
+# Consumers supervisors.
+for port, name in (
+    (10022, 'su04.288.mm'),
+    (20022, 'su05.288.mm'),
+    (30022, 'rpi02.288.mm'),
+):
+    specs[name] = dict(
+        volume='supervisors/%s' % name,
+        excludes=supe_excludes,
+        host='c288.mminternals.com',
+        port=port,
     )
 
 
@@ -172,9 +191,9 @@ else:
 dst = dst_path + '/'
 
 rsync_command = cmd = ['sudo', 'rsync',
-    '-e', 'ssh -i ~mmbackup/.ssh/id_rsa',
+    '-e', 'ssh -p {} -i ~mmbackup/.ssh/id_rsa'.format(spec.get('port', 22)),
     '--rsync-path', 'sudo rsync',
-    '-ax',
+    '-ax', # The -x is *critical* to leave.
     '--delete',
     '--delete-excluded',
 ]

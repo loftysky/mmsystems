@@ -45,7 +45,7 @@ def iter_metrics(include_devices=None, exclude_devices=None, tags_by_name=None, 
         tags = dict(tags_by_name.get(name) or {}) if tags_by_name else {}
         tags.update(agg_tags)
         tags.setdefault('name', name)
-        yield Metrics('disk.io', 'disk.io.{name}', tags, data._asdict())
+        yield Metrics('disk.io', 'disk.io.{host}.{name}', tags, data._asdict())
 
 
 _zfs_kwargs = {}

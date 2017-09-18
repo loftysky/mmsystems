@@ -89,11 +89,12 @@ for name in '''
     RENDER
 '''.strip().split():
     specs['terrablock.mm/%s' % name.lower()] = dict(
-        host='gx01.mm',
+        host='c288.mminternals.com',
+        port=10022,
         src_path='/media/%s' % name,
         volume='terrablock/%s' % name,
         pre_command=[
-            'ssh', 'gx01.mm',
+            'ssh', '-p', '10022', 'c288.mminternals.com',
             ('sudo /usr/lib/terrablock/CommandApp -i terrablock.mm -u mmconfig -m {name}; ' + 
              'mount | grep -q "/media/{name} "').format(name=name)
         ]

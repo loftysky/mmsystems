@@ -1,147 +1,209 @@
+from Queue import Queue
 import argparse
-import math
 import datetime
+import math
+import os
+import sys
+import threading
+import time
+
+sys.path.append('/usr/local/vee/environments/markmedia/master/lib64/python2.7/site-packages')
 
 import MySQLdb as mysql
-
-
-
-parser = argparse.ArgumentParser()
-parser.add_argument('-a', '--de-alarm', action='store_true')
-parser.add_argument('-A', '--de-alert', action='store_true')
-parser.add_argument('-t', '--re-total', action='store_true')
-parser.add_argument('-b', '--re-bulk', action='store_true')
-parser.add_argument('-m', '--add-missing', action='store_true')
-
-parser.add_argument('-n', '--dry-run', action='store_true')
-args = parser.parse_args()
-
-
-con = mysql.Connect(
-    host='127.0.0.1',
-    user='zmuser',
-    passwd='xxx',
-    db='zm',
-)
 
 
 BULK_SIZE = 900
 BULK_PAD  = 6
 
 
-def de_alarm(start=0):
+def main():
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('-a', '--de-alarm', action='store_true')
+    parser.add_argument('-A', '--de-alert', action='store_true')
+
+    parser.add_argument('-T', '--re-total-frames', action='store_true')
+    parser.add_argument('-t', '--re-total-events', action='store_true')
+    parser.add_argument('-b', '--re-bulk', action='store_true')
+
+
+    # parser.add_argument('-m', '--migrate', action='store_true')
+
+    parser.add_argument('-M', '--add-missing', action='store_true')
+
+    parser.add_argument('-x', '--delete-boring', action='store_true')
+    parser.add_argument('-X', '--delete-old', action='store_true')
+
+    parser.add_argument('-f', '--delete-files', action='store_true')
+
+    parser.add_argument('-n', '--dry-run', action='store_true')
+    args = parser.parse_args()
+
+    con = mysql.Connect(
+        host='127.0.0.1',
+        user='zmuser',
+        passwd='xxx',
+        db='zm',
+    )
+
+    for name in ('de_alarm', 'de_alert', 'add_missing',
+        'delete_boring', 're_total_frames', 're_bulk', 're_total_events',
+        'delete_old', 'delete_files'):
+        if getattr(args, name):
+            globals()[name](con, args)
+
+
+def de_alarm(con, args):
 
     cur = con.cursor()
-    cur.execute('''SELECT Id, EventId, FrameId FROM Frames WHERE Id > %s AND Score > 0 AND Score < 5 LIMIT 1000''', [start])
-    rows = cur.fetchall()
-    if not rows:
-        return
+    start_id = 0
 
-    max_id = rows[-1][0]
-
-    by_event = {}
-    for row in rows:
-        Id, EventId, FrameId = row
-        by_event.setdefault(EventId, []).append((Id, FrameId))
-
-    for EventId, rows in sorted(by_event.iteritems()):
-        print '    event {}: {} frames from {} to {}'.format(EventId, len(rows), rows[0][1], rows[-1][1])
-        if not args.dry_run:
-            cur.execute('''DELETE FROM Stats WHERE EventId = %s AND FrameId IN ({})'''.format(','.join(['%s'] * len(rows))), [EventId] + [row[1] for row in rows])
-            cur.execute('''UPDATE Frames SET Score = 0, Type = "Normal" WHERE Id IN ({})'''.format(','.join(['%s'] * len(rows))), [row[0] for row in rows])
-
-    return max_id
-
-if args.de_alarm:
-
-    print "Removing all stats with score < 5."
-    i = 0
-    state = 0
     while True:
-        state = de_alarm(state)
-        if not state:
-            break
-        i += 1
-        if i % 10 == 0:
-            con.commit()
-    con.commit()
+
+        cur.execute('''SELECT Id, EventId, FrameId FROM Frames WHERE Id > %s AND Score > 0 AND Score < 5 LIMIT 1000''', [start_id])
+        rows = cur.fetchall()
+        if not rows:
+            return
+
+        start_id = rows[-1][0]
+
+        by_event = {}
+        for row in rows:
+            Id, EventId, FrameId = row
+            by_event.setdefault(EventId, []).append((Id, FrameId))
+
+        for EventId, rows in sorted(by_event.iteritems()):
+            print '    event {}: {} frames from {} to {}'.format(EventId, len(rows), rows[0][1], rows[-1][1])
+            if not args.dry_run:
+                cur.execute('''DELETE FROM Stats WHERE EventId = %s AND FrameId IN ({})'''.format(','.join(['%s'] * len(rows))), [EventId] + [row[1] for row in rows])
+                cur.execute('''UPDATE Frames SET Score = 0, Type = "Normal" WHERE Id IN ({})'''.format(','.join(['%s'] * len(rows))), [row[0] for row in rows])
 
 
-# This one is kinda assumed. I'm not 100% what these are. They are frames with
-# score = 50, and no stats.
-def de_alert(start=0):
 
-    cur = con.cursor()
-    cur.execute('''
-        SELECT f.Id, f.EventId, f.Score
-        FROM Frames as f LEFT OUTER JOIN Stats AS s
-        ON f.EventId = s.EventId AND f.FrameId = s.FrameId
-        WHERE f.Id > %s AND f.Score > 0 AND s.Score IS NULL
-        LIMIT 1000
-    ''', [start])
 
-    rows = list(cur)
-    if not rows:
+
+def de_alert(con, args):
+
+    if args.dry_run:
         return
 
-    ids = [r[0] for r in rows]
-    event = rows[0][1]
-    score = sum(r[2] for r in rows)
-
-    print '    Normalizing {} frames from #{} with total score {}, from {} to {}'.format(len(ids), event, score, ids[0], ids[-1])
-    if not args.dry_run:
-        cur.execute('''UPDATE Frames SET Score = 0, Type = "Normal" WHERE Id IN ({})'''.format(','.join(['%s'] * len(ids))), ids)
-    return ids[-1]
-
-if args.de_alert:
+    # This one is kinda assumed. I'm not 100% what these are. They are frames with
+    # score = 50, and no stats.
 
     print "Removing all alerts."
-    i = 0
-    state = 0
-    while True:
-        state = de_alert(state)
-        if not state:
-            break
-        i += 1
-        if i % 10 == 0:
+
+    cur = con.cursor()
+    cur.execute('''SELECT Id FROM Events''')
+    ids = [r[0] for r in cur]
+    for EventId in ids:
+        print '   ', EventId
+        cur.execute('''
+            UPDATE
+                Frames
+                LEFT OUTER JOIN Stats
+                    ON Frames.FrameId = Stats.FrameId
+                    AND Frames.EventId = Stats.EventId
+            SET Frames.Score = 0,
+                Frames.Type = "Normal"
+            WHERE Frames.EventId = %s
+              AND Frames.Score > 0
+              AND Stats.Score IS NULL
+        ''', [EventId])
+        print cur.rowcount
+        if cur.rowcount:
             con.commit()
-    con.commit()
 
 
-if args.re_total:
+
+def _calc_event_scores(cur, id_, num_frames=None):
+
+    cur.execute('''SELECT Score From Stats WHERE EventId = %s and Score >= 5''', [id_])
+    scores = [row[0] for row in cur]
+
+    alarm_frames = len(filter(None, scores))
+    tot_score = sum(scores) if scores else 0
+    max_score = max(scores) if scores else 0
+
+    if tot_score and num_frames is None:
+        cur.execute('''SELECT Frames FROM Events WHERE Id = %s''', [id_])
+        num_frames = cur.fetchone()[0]
+    avg_score = int(tot_score / num_frames) if tot_score else 0
+
+    return alarm_frames, tot_score, max_score, avg_score
+
+
+
+def re_total_frames(con, args):
+
+    cur = con.cursor()
+    cur.execute('''SELECT Id FROM Events WHERE NOT EndTime IS NULL ORDER BY Id DESC''')
+    for eid, in cur.fetchall():
+
+        print eid
+
+        cur.execute('''SELECT FrameId, sum(Score) from Stats WHERE EventId = %s GROUP BY FrameId''', [eid])
+        stat_scores = dict(cur)
+
+        did_update = False
+        cur.execute('''SELECT Id, FrameId, Score, Type from Frames WHERE EventId = %s''', [eid])
+        for id_, fid, fscore, ftype in cur:
+            sscore = stat_scores.get(fid, 0)
+            if sscore != fscore or (not sscore and ftype == 'Alarm'):
+                print '    frame {} ({}): {} != {}'.format(fid, id_, sscore, fscore or 0)
+                if not args.dry_run:
+                    cur.execute('''UPDATE Frames SET Score = %s, Type = %s WHERE Id = %s''', [
+                        sscore, 'Alarm' if sscore else 'Normal', id_,
+                    ])
+                    did_update = True
+
+        if did_update:
+            con.commit()
+
+
+
+def re_total_one(con, id_):
+    cur = con.cursor()
+    alarm_frames, tot_score, max_score, avg_score = _calc_event_scores(cur, id_)
+    cur.execute('''UPDATE Events SET AlarmFrames = %s, TotScore = %s, MaxScore = %s, AvgScore = %s WHERE Id = %s''', [
+        alarm_frames, tot_score, max_score, avg_score, id_,
+    ])
+    return tot_score
+
+
+def re_total_events(con, args):
 
     print 'Re-totalling event scores.'
 
     cur = con.cursor()
-    cur.execute('''SELECT Id, Frames, AlarmFrames, TotScore, MaxScore, AvgScore FROM Events WHERE TotScore > 0''')
+    cur.execute('''SELECT Id, Frames, AlarmFrames, TotScore, MaxScore, AvgScore FROM Events''')
     events = list(cur)
 
     for EventId, Frames, AlarmFrames, TotScore, MaxScore, AvgScore in events:
-        cur.execute('''SELECT Score From Stats WHERE EventId = %s and Score > 0''', [EventId])
-        scores = [r[0] for r in cur]
-        alarm_frames = len(filter(None, scores))
-        tot_score = sum(scores) if scores else 0
-        max_score = max(scores) if scores else 0
-        avg_score = int(tot_score / Frames) if scores else 0
-        if alarm_frames != AlarmFrames or tot_score != TotScore or max_score != MaxScore:
-            print '    event {}: totaled {}/{}/{}/{} does not match recorded {}/{}/{}/{}'.format(EventId,
-                alarm_frames, tot_score, max_score, avg_score,
-                AlarmFrames, TotScore, MaxScore, AvgScore,
-            )
-            if not args.dry_run:
-                cur.execute('''UPDATE Events SET AlarmFrames = %s, TotScore = %s, MaxScore = %s, AvgScore = %s WHERE Id = %s''', [
-                    alarm_frames, tot_score, max_score, avg_score, EventId,
-                ])
-                con.commit()
+
+        alarm_frames, tot_score, max_score, avg_score = _calc_event_scores(cur, EventId, Frames)
+        if alarm_frames == AlarmFrames and tot_score == TotScore and max_score == MaxScore:
+            continue
+
+        print '    event {}: totaled {}/{}/{}/{} does not match recorded {}/{}/{}/{}'.format(EventId,
+            alarm_frames, tot_score, max_score, avg_score,
+            AlarmFrames, TotScore, MaxScore, AvgScore,
+        )
+        if not args.dry_run:
+            cur.execute('''UPDATE Events SET AlarmFrames = %s, TotScore = %s, MaxScore = %s, AvgScore = %s WHERE Id = %s''', [
+                alarm_frames, tot_score, max_score, avg_score, EventId,
+            ])
+            con.commit()
 
 
-if args.re_bulk:
+def re_bulk(con, args):
+
 
     print 'Re-Bulking frames.'
 
     cur = con.cursor()
-    cur.execute('''SELECT Id FROM Events''')
-    event_ids = list(cur)
+    cur.execute('''SELECT Id FROM Events WHERE NOT EndTime IS NULL ORDER BY Id DESC''')
+    event_ids = [r[0] for r in cur]
 
     to_bulk = []
     def do_bulk(EventId):
@@ -196,7 +258,10 @@ if args.re_bulk:
 
 
 
-if args.add_missing:
+def add_missing(con, args):
+
+    if args.dry_run:
+        return
 
     # My bad. I broke it all.
     print 'Replace missing frames.'
@@ -211,7 +276,7 @@ if args.add_missing:
 
         per_frame = ((EndTime - StartTime).total_seconds() + 0.5) / float(Frames)
 
-        cur.execute('''SELECT FrameId, sum(Score) FROM Stats WHERE EventId = %s GROUP BY FrameId''', [EventId])
+        cur.execute('''SELECT FrameId, sum(Score) FROM Stats WHERE EventId = %s AND Score >= 5 GROUP BY FrameId''', [EventId])
         frames = list(cur)
 
         last = 0
@@ -245,3 +310,140 @@ if args.add_missing:
         con.commit()
 
 
+def delete_event(cur, eid):
+    cur.execute('''DELETE FROM Stats WHERE EventId = %s''', [eid])
+    cur.execute('''DELETE FROM Frames WHERE EventId = %s''', [eid])
+    cur.execute('''DELETE FROM Events WHERE Id = %s''', [eid])
+
+
+def delete_old(con, args):
+
+    cur = con.cursor()
+    # cur.execute('''SELECT Id, StartTime, EndTime, TotScore FROM Events''')
+    # events = list(cur)
+
+    # for id_, start_time, end_time, tot_score in events:
+    #     print start_time, end_time
+
+    cur.execute('''SELECT Id FROM Events WHERE NOT EndTime is NULL AND (TotScore = 0 OR TIMESTAMPDIFF(DAY, EndTime, NOW()) >= 7)''')
+    events = [row[0] for row in cur]
+
+    for id_ in events:
+        print 'Deleting event', id_
+        if not args.dry_run:
+            delete_event(cur, id_)
+            con.commit()
+
+
+def datetime_is_boring(v):
+
+    if not v:
+        return False
+
+    if v.weekday() >= 5: # 0 is Monday, so 5 is Saturday
+        return False
+
+    if v.hour < 7: # Before 7am
+        return False
+
+    if v.hour >= 20: # After 8pm.
+        return False
+
+    return True
+
+
+def delete_boring(con, args):
+
+    cur = con.cursor()
+
+    boring_zones = list()
+    cur.execute('''SELECT Id, Name FROM Zones''')
+    for zid, name in cur:
+        boring = 'unit8' not in name and 'door' not in name
+        if boring:
+            boring_zones.append(zid)
+        print '{:16s} is {}'.format(name, 'boring' if boring else 'INTERESTING')
+    boring_zones_sql = '({})'.format(', '.join(str(x) for x in boring_zones))
+
+    cur.execute('''SELECT Id, StartTime, EndTime FROM Events WHERE TotScore > 0''')
+    for eid, start_time, end_time in cur.fetchall():
+
+        if not datetime_is_boring(start_time):
+            continue
+        if not datetime_is_boring(end_time):
+            continue
+
+        print 'Considering event {} from {} to {}'.format(eid, start_time, end_time)
+        cur.execute('''DELETE FROM Stats WHERE EventId = %s AND ZoneId IN {}'''.format(boring_zones_sql), [eid])
+        if cur.rowcount:
+            print '    Removed {} boring stats.'.format(cur.rowcount)
+            new_total = re_total_one(con, eid)
+            if not new_total:
+                print '    Event has no interesting stats; deleting.'
+                delete_event(cur, eid)
+            con.commit()
+
+
+
+def delete_files(con, args):
+
+    cur = con.cursor()
+    cur.execute('''SELECT Id FROM Events''')
+    ids = set(r[0] for r in cur)
+    max_id = max(ids)
+
+    def target():
+        while True:
+            path = queue.get()
+            if not path:
+                queue.put(None) # Cascade a shutdown.
+            os.unlink(path)
+
+    n_threads = 32
+    queue = Queue(n_threads)
+    threads = []
+    for _ in xrange(n_threads):
+        thread = threading.Thread(target=target)
+        thread.daemon = True
+        thread.start()
+        threads.append(thread)
+
+    root = '/Volumes/securitycams/zoneminder/events'
+    for monitor in '1', '2':
+        mdir = os.path.join(root, monitor)
+        for year in sorted(os.listdir(mdir)):
+            Ydir = os.path.join(mdir, year)
+            for month in sorted(os.listdir(Ydir)):
+                Mdir = os.path.join(Ydir, month)
+                for day in sorted(os.listdir(Mdir)):
+                    Ddir = os.path.join(Mdir, day)
+                    for event in sorted(os.listdir(Ddir)):
+                        if event.startswith('.') and event[1:].isdigit():
+                            id_ = int(event[1:])
+                            if id_ >= max_id:
+                                continue
+                            if id_ not in ids:
+                                print
+                                print 'Deleting', id_,
+                                if args.dry_run:
+                                    continue
+                                edir = os.path.join(Ddir, event)
+                                for i, name in enumerate(sorted(os.listdir(edir))):
+                                    if i % 100 == 0:
+                                        sys.stdout.write('.')
+                                        sys.stdout.flush()
+                                    queue.put(os.path.join(edir, name))
+
+                                # Need to wait for it to empty before cleaning up the symlink.
+                                while not queue.empty():
+                                    time.sleep(0.1)
+                                os.unlink(edir)
+
+    for thread in threads:
+        queue.put(None)
+        thread.join()
+
+
+
+if __name__ == '__main__':
+    main()

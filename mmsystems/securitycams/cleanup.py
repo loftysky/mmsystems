@@ -211,7 +211,7 @@ def re_bulk(con, args):
         ids_ = to_bulk[:]
         to_bulk[:] = []
 
-        if len(ids_) < 2:
+        if len(ids_) < 3:
             return
 
         new_bulks = set()
@@ -222,7 +222,7 @@ def re_bulk(con, args):
         if len(new_bulks) == len(ids_):
             return
 
-        print '    Making {} groups covering {} to {}'.format(len(new_bulks), ids_[0], ids_[-1])
+        print '    Making {} group(s) covering {} to {}'.format(len(new_bulks), ids_[0], ids_[-1])
         if not args.dry_run:
             cur.execute('''UPDATE Frames SET Type = "Bulk" WHERE EventId = %s AND FrameId IN ({})'''.format(','.join(['%s'] * len(new_bulks))), [EventId] + list(new_bulks))
             cur.execute('''DELETE FROM Frames              WHERE EventId = %s AND FrameId >= %s AND FrameId <= %s AND NOT FrameId IN ({})'''.format(','.join(['%s'] * len(new_bulks))), [
@@ -359,7 +359,7 @@ def delete_boring(con, args):
     boring_zones = list()
     cur.execute('''SELECT Id, Name FROM Zones''')
     for zid, name in cur:
-        boring = 'unit8' not in name and 'door' not in name
+        boring = 'unit8' not in name and 'rear-door' not in name
         if boring:
             boring_zones.append(zid)
         print '{:16s} is {}'.format(name, 'boring' if boring else 'INTERESTING')

@@ -11,12 +11,18 @@ class SmartInfo(dict):
 
     @property
     def make_and_model(self):
-        model = self.get('device model')
-        if model:
-            make, model = model.split(None, 1)
-        else:
-            make = self.get('vendor')
-            model = self.get('product')
+
+        make = self.get('vendor')
+        model = self.get('product')
+
+        if not (make and model):
+            model = self.get('device model')
+            if model:
+                try:
+                    make, model = model.split(None, 1)
+                except ValueError:
+                    make = None
+
         return make, model
 
 

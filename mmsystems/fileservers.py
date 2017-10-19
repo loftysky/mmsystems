@@ -114,7 +114,7 @@ def iter_disks():
 
 def main():
 
-    pattern = '{pool:10}  {vdev:10}  {devs:35}  {make:7}  {model:18}  {capacity:>7}  {disk:38}  {sn}'
+    pattern = '{pool:10}  {vdev:10}  {devs:35}  {make:7}  {model:20}  {capacity:>7}  {disk:38}  {sn}'
     print pattern.format(
         pool='ZFS_POOL',
         vdev='ZFS_VDEV',

@@ -2,8 +2,12 @@ import argparse
 import os
 import re
 import subprocess
+import datetime
 
 from ..ssh import SSHPool
+
+
+DEFAULT_USER = 'mmbackup' #os.environ.get('SUDO_USER', os.getlogin())
 
 
 normalize_types = dict(
@@ -27,9 +31,9 @@ def get_mountpoint(queue, strict=True):
         raise ValueError(err.strip())
 
 
-def backup_one(type, name, source, subdir='', host='nx02.mm', user='mmbackup', pool='crazyhorse',
+def backup_one(type, name, source, subdir='', host='nx02.mm', user=DEFAULT_USER, pool='crazyhorse',
     parent='backup', verbose=False, dry_run=False, delete=False):
-    
+
     type = type.lower()
     type = normalize_types.get(type, type)
 
@@ -94,7 +98,20 @@ def backup_one(type, name, source, subdir='', host='nx02.mm', user='mmbackup', p
     rsync = ['sudo', '-p', 'sudo password: '] + rsync
 
     if not dry_run:
-        subprocess.check_call(rsync)
+        code = subprocess.call(rsync)
+        if code:
+            raise ValueError("rsync returned error code", code)
+
+    snapshot = volume_name + '@' + datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+
+    snapshot_command = 'zfs snapshot {}'.format(snapshot)
+    if verbose:
+        print '$', snapshot_command
+    if not dry_run:
+        ssh.exec_command('sudo {}'.format(snapshot_command))
+
+    if verbose and not dry_run:
+        print 'Done.'
 
 def main():
 
@@ -103,7 +120,7 @@ def main():
     parser.add_argument('-N', '--dry_run', action='store_true')
     parser.add_argument('-D', '--delete', action='store_true')
     parser.add_argument('--host', default='nx02.mm')
-    parser.add_argument('--user', default='mmbackup')
+    parser.add_argument('--user', default=DEFAULT_USER)
     parser.add_argument('--pool', default='crazyhorse')
     parser.add_argument('--parent', default='backup')
     parser.add_argument('-t', '--type', required=True)
@@ -112,7 +129,10 @@ def main():
     parser.add_argument('source')
     args = parser.parse_args()
 
-    backup_one(**args.__dict__)
+    try:
+        backup_one(**args.__dict__)
+    except ValueError as e:
+        print '[mmbackup-one] ERROR:', '; '.join(str(x) for x in e.args)
 
 
 if __name__ == '__main__':

@@ -22,6 +22,8 @@ setup(
 
             mmarchive-ingest = mmsystems.archive:ingest_main
 
+            mmbackup-one = mmsystems.backup.one:main
+            
             mmfileservers-status = mmsystems.fileservers:main
 
             mminflux-query = mmsystems.metrics.influx:main_query

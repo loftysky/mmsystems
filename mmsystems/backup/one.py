@@ -89,7 +89,7 @@ def backup_one(type, name, source, subdir='', host='nx02.mm', user=DEFAULT_USER,
         dest = '{}/{}'.format(mountpoint, subdir)
     else:
         dest = mountpoint
-    rsync.append('{}:{}/'.format(host, dest))
+    rsync.append('{}@{}:{}/'.format(user, host, dest))
 
     dest = os.path.join(mountpoint)
     if verbose:

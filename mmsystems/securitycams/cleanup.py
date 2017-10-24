@@ -128,7 +128,7 @@ def _calc_event_scores(cur, id_, num_frames=None):
     if tot_score and num_frames is None:
         cur.execute('''SELECT Frames FROM Events WHERE Id = %s''', [id_])
         num_frames = cur.fetchone()[0]
-    avg_score = int(tot_score / num_frames) if tot_score else 0
+    avg_score = int(tot_score / num_frames) if (tot_score and num_frames) else 0
 
     return alarm_frames, tot_score, max_score, avg_score
 

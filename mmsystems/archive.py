@@ -24,6 +24,7 @@ def ingest_main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-n', '--name')
     parser.add_argument('-d', '--description')
+    parser.add_argument('-m', '--mountpoint', default='/Volumes/archive')
     parser.add_argument('-y', '--yes', action='store_true',
         help="Assume 'yes' answers all questions.")
     parser.add_argument('-f', '--force', action='store_true',
@@ -34,11 +35,11 @@ def ingest_main():
     mounts = psutil.disk_partitions(True)
     
     # Lets be super safe about what we are going.
-    dst_mount = next((m for m in mounts if m.mountpoint == '/Volumes/archive'), None)
+    dst_mount = next((m for m in mounts if m.mountpoint == args.mountpoint), None)
     if not dst_mount:
         print("Archive is not mounted.", file=sys.stderr)
         exit(1)
-    dst_root = '/Volumes/archive/ingest'
+    dst_root = os.path.join(args.mountpoint, 'ingest')
     if not os.path.exists(dst_root):
         print("Archive ingest is missing.", file=sys.stderr)
         exit(1)

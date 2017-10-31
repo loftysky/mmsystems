@@ -5,7 +5,7 @@ from urlparse import urljoin
 
 import requests
 
-from .core import Metrics
+from ..core import Metrics
 
 
 def main_query():

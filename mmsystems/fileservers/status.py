@@ -6,9 +6,9 @@ import os
 import re
 import sys
 
-from . import zfs
-from . import smart
-from .ssh import SSHPool
+from .. import zfs
+from .. import smart
+from ..ssh import SSHPool
 
 
 Disk = collections.namedtuple('Disk', 'id zfs devs info')

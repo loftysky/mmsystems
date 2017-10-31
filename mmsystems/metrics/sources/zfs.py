@@ -1,6 +1,6 @@
 import os
 
-from .core import Metrics
+from ..core import Metrics
 
 
 import psutil

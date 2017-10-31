@@ -9,7 +9,7 @@ from subprocess import check_output
 
 import psutil
 
-from .core import Metrics
+from ..core import Metrics
 
 IS_MACOS = sys.platform == 'darwin'
 IS_LINUX = not IS_MACOS

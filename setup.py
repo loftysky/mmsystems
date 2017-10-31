@@ -15,20 +15,19 @@ setup(
     author_email='mikeb@loftysky.com',
     license='BSD-3',
     
-    scripts=[os.path.join('bin', x) for x in os.listdir('bin')],
+    scripts=[os.path.join('bin', x) for x in os.listdir('bin') if not x.startswith('.')],
 
     entry_points={
         'console_scripts': '''
 
             mmarchive-ingest = mmsystems.archive:ingest_main
-
             mmbackup-one = mmsystems.backup.one:main
+            mmfileservers-status = mmsystems.fileservers.status:main
+            mmindex-create = mmsystems.index.create:main
+            mmmetrics-client = mmsystems.metrics.client:main
+            mmmetrics-influx-query = mmsystems.metrics.influx:main_query
+            mmmetrics-influx-write = mmsystems.metrics.influx:main_write
             
-            mmfileservers-status = mmsystems.fileservers:main
-
-            mminflux-query = mmsystems.metrics.influx:main_query
-            mminflux-write = mmsystems.metrics.influx:main_write
-
         ''',
     },
 

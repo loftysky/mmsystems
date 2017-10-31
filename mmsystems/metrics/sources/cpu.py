@@ -1,6 +1,6 @@
 import psutil
 
-from .core import Metrics
+from ..core import Metrics
 
 
 def get_metrics():

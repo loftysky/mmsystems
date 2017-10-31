@@ -5,8 +5,8 @@ import errno
 import psutil
 
 from . import utils
-from .core import Metrics
-from ..zfs import zpool_list
+from ..core import Metrics
+from ...zfs import zpool_list
 
 
 KEYS = ('read_count', 'write_count', 'read_bytes', 'write_bytes', 'read_time', 'write_time')

@@ -1,0 +1,61 @@
+#!/usr/bin/env python
+
+import argparse
+import subprocess
+import sys
+import os
+
+from mmsystems.backup.prune import label_snapshots
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-n', '--dry-run', action='store_true')
+parser.add_argument('-v', '--verbose', action='store_true')
+parser.add_argument('-y', '--yes', action='store_true')
+parser.add_argument('-r', '--recursive', action='store_true',
+    help="Given root contains one level of other roots.")
+parser.add_argument('root')
+args = parser.parse_args()
+
+
+if args.recursive:
+    names = os.listdir(args.root)
+    names = [x for x in names if not x.startswith('.')]
+    roots = [os.path.join(args.root, name) for name in names]
+else:
+    roots = [args.root]
+
+
+for root in roots:
+
+    if args.verbose:
+        print root
+        print '=' * 20
+
+    names = sorted(os.listdir(args.root))
+    names = [x for x in names if not x.startswith('.')]
+
+    labels = label_snapshots([(x, x) for x in names])
+
+    for name in names:
+        label = labels.get(name)
+        if args.verbose:
+            print '%7s %s' % (label or '-', name)
+        if label:
+            continue
+
+        cmd = ['sudo', 'rm', '-rf', os.path.join(root, name)]
+        if args.verbose:
+            print '            $', ' '.join(cmd)
+        if not args.dry_run:
+            yes = args.yes
+            if not yes:
+                res = raw_input('Delete %s ? [yN]: ' % name).strip()
+                yes = res.lower() in ('y', 'yes')
+            if yes:
+                subprocess.check_call(cmd)
+
+    if args.verbose:
+        print
+    
+ 

@@ -78,7 +78,7 @@ if hostname == 'nx01.mm':
         dict(name='digital_media', networks=main_networks),
         dict(name='GMroot', networks=main_networks),
         dict(name='MKroot', networks=main_networks),
-        dict(name='PD01', networks=main_networks),
+        #dict(name='PD01', networks=main_networks),
         dict(name='svn', networks=main_networks),
 
     ]

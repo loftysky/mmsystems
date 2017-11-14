@@ -32,7 +32,7 @@ for root in roots:
         print root
         print '=' * 20
 
-    names = sorted(os.listdir(args.root))
+    names = sorted(os.listdir(root))
     names = [x for x in names if not x.startswith('.')]
 
     labels = label_snapshots([(x, x) for x in names])

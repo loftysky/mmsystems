@@ -56,7 +56,7 @@ def label_snapshots(snapshots):
             ctime = parse_datetime(ctime)
             if not ctime:
                 to_keep[name] = 'unknown'
-            continue
+                continue
 
         days = (now - ctime).days
 

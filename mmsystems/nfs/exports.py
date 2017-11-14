@@ -16,6 +16,7 @@ import argparse
 import os
 import shutil
 import sys
+import socket
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-o', '--output')
@@ -47,7 +48,12 @@ all_networks     = tuple(sorted(networks.values()))
 authned_networks = ('main', 'ipsec', 'openvpn')
 main_networks    = ('main', 'ipsec')
 
-volumes = [
+
+hostname = socket.gethostname()
+
+if hostname == 'nx01.mm':
+
+    volumes = [
 
         dict(name='scratch', networks=all_networks),
         dict(name='ubuntu-16.04', networks=all_networks),
@@ -63,10 +69,13 @@ volumes = [
         dict(name='GMroot', networks=main_networks),
         dict(name='MKroot', networks=main_networks),
         dict(name='PD01', networks=main_networks),
-        #dict(name='VCroot', networks=main_networks),
+        dict(name='svn', networks=main_networks),
 
-]
+    ]
 
+else:
+    print 'Unknown host:', hostname
+    exit(1)
 
 for volume in volumes:
     out.write('/export/{name}'.format(**volume))

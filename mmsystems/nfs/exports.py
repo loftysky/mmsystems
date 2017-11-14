@@ -19,23 +19,33 @@ import sys
 import socket
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-o', '--output')
+parser.add_argument('-o', '--output', default='/etc/exports')
+parser.add_argument('-v', '--verbose', action='store_true')
+parser.add_argument('-n', '--dry-run', action='store_true')
+
 args = parser.parse_args()
 
 
-if args.output:
+
+if args.output and not args.dry_run:
     if os.path.exists(args.output):
         shutil.copy(args.output, args.output + '.bak')
     out = open(args.output + '.in-progress', 'w')
 else:
-    out = sys.stdout
+    out = None
 
 
-out.write(header + '\n')
+def write(x):
+    if args.verbose:
+        print x,
+    if out is not None:
+        out.write(x)
+
+write(header + '\n')
 
 
 # For NFSv4.
-out.write('/export 10.10.3.0/22(rw,fsid=0,insecure,crossmnt,no_subtree_check,async)\n')
+write('/export 10.10.3.0/22(rw,fsid=0,insecure,crossmnt,no_subtree_check,async)\n')
 
 
 networks = {
@@ -78,14 +88,14 @@ else:
     exit(1)
 
 for volume in volumes:
-    out.write('/export/{name}'.format(**volume))
+    write('/export/{name}'.format(**volume))
     for network in volume['networks']:
         network = networks.get(network, network)
-        out.write(' \\\n\t{}(rw,nohide,insecure,no_subtree_check,async,no_root_squash)'.format(network))    
-    out.write('\n')
+        write(' \\\n\t{}(rw,nohide,insecure,no_subtree_check,async,no_root_squash)'.format(network))    
+    write('\n')
 
 
-if args.output:
+if out is not None:
     out.close()
     shutil.move(args.output + '.in-progress', args.output)
 

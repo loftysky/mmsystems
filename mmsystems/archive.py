@@ -10,7 +10,9 @@ import sys
 import psutil
 import yaml
 
-from smart import parse_info as parse_smart
+from .smart import parse_info as parse_smart
+from .index.create import main as index_create_main
+
 
 def makedirs(path):
     try:
@@ -25,6 +27,7 @@ def ingest_main():
     parser.add_argument('-n', '--name')
     parser.add_argument('-d', '--description')
     parser.add_argument('-m', '--mountpoint', default='/Volumes/archive')
+    parser.add_argument('-c', '--checksum', action='store_true')
     parser.add_argument('-y', '--yes', action='store_true',
         help="Assume 'yes' answers all questions.")
     parser.add_argument('-f', '--force', action='store_true',
@@ -87,6 +90,17 @@ def ingest_main():
     meta_dir = os.path.join(dst_dir, '__mmbackup__')
     meta_path = os.path.join(meta_dir, 'metadata.yml')
     smart_pattern = os.path.join(meta_dir, 'smartctl,{}.txt')
+
+    if args.checksum:
+        checksum_path = os.path.join(meta_dir, 'index.txt')
+        print("Checksuming volume...")
+        index_create_main([
+            '-o', checksum_path,
+            '--auto-start',
+            '--verbose',
+            args.root
+        ])
+        return
 
     if os.path.exists(meta_path):
 
@@ -159,12 +173,6 @@ def ingest_main():
         args.root + '/',
         dst_dir + '/',
     ])
-
-
-
-if __name__ == '__main__':
-    ingest_main()
-
 
 
 

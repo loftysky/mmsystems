@@ -8,17 +8,23 @@ import os
 import subprocess
 import sys
 import socket
+import getpass
+import errno
 
 from mmsystems.ssh import SSHPool
 
 parser = argparse.ArgumentParser()
+parser.add_argument('-p', '--passwd', action='store_true')
 parser.add_argument('--restart', action='store_true')
-parser.add_argument('--stop', action='store_true')
+parser.add_argument('--stop', '--kill', action='store_true')
 parser.add_argument('-d', '--display', type=int, default=os.getuid())
 # parser.add_argument('host', nargs='?')
 args = parser.parse_args()
 
 
+
+# TODO: Get SSH to work with Mike's keys, AND use `vncpasswd -f` for setting
+# a password.
 if False: #args.host:
 
     ssh = SSHPool(args.host)
@@ -30,23 +36,61 @@ if False: #args.host:
 
 else:
 
-    def call_output(cmd):
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out, err = proc.communicate()
+    def call_output(cmd, stdin=None, capture_output=True):
+        proc = subprocess.Popen(cmd,
+            stdin=None if stdin is None else subprocess.PIPE,
+            stdout=subprocess.PIPE if capture_output else None,
+            stderr=subprocess.PIPE if capture_output else None,
+        )
+        out, err = proc.communicate(stdin)
         return proc.returncode, out, err
 
-    def call(cmd):
-        return subprocess.check_call(cmd)
+    def call(cmd, stdin=None):
+        return call_output(cmd, stdin, capture_output=False)
 
     platform = sys.platform
     host = socket.gethostname()
 
 
 if not platform.startswith('linux'):
-    print("mmvnc only works on Linux.", file=sys.stderr)
+    print("This command only works on Linux.", file=sys.stderr)
     if platform == 'darwin':
         print("Please use Apple's builtin service.")
     exit(1)
+
+
+# We handle getting the user's password so when we get around to doing this
+# via SSH there is no client interaction.
+config_path = os.path.join(os.path.expanduser('~'), '.vnc')
+passwd_path = os.path.join(config_path, 'passwd')
+if args.passwd or not os.path.exists(passwd_path):
+
+    pass1 = getpass.getpass("Enter password for VNC server: ")
+    pass2 = getpass.getpass("Confirm password: ")
+    if pass1 != pass2:
+        print("Passwords do not match.", file=sys.stderr)
+        exit(1)
+    if len(pass1) < 4:
+        print("Password is not complex enough.", file=sys.stderr)
+        exit(1)
+
+    code, encoded, _ = call_output(['vncpasswd', '-f'], stdin=pass1)
+    if code:
+        exit(code)
+
+    try:
+        os.makedirs(config_path)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+    with open(passwd_path, 'wb') as fh:
+        fh.write(encoded)
+
+    if args.passwd:
+        exit(0)
+
+
+
 
 raw_existing = call_output(['vncserver', '-list'])[1]
 existing = set(int(x.split()[0][1:]) for x in raw_existing.splitlines() if x.startswith(':'))
@@ -57,16 +101,18 @@ do_start = args.restart or not args.stop
 
 if do_stop:
     if args.display not in existing:
-        print("vncserver is not already running.")
+        print("VNC server is not already running.")
         exit(1)
     call(['vncserver', '-kill', ':{}'.format(args.display)])
 
 if do_start:
     if args.display in existing:
-        print("vncserver is already running.")
+        print("VNC server is already running.")
     else:
-        print("Starting vncserver...", file=sys.stderr)
+        print("Starting VNC server...", file=sys.stderr)
         call(['vncserver', ':{}'.format(args.display)])
 
-print('Please connect to ', end='', file=sys.stderr)
-print('vnc://{}:{}'.format(host, 5900 + args.display))
+    print('Please connect to ', end='', file=sys.stderr)
+    print('vnc://{}:{}'.format(host, 5900 + args.display))
+
+

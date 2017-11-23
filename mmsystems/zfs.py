@@ -11,7 +11,7 @@ Disk  = collections.namedtuple('Disk', 'name index')
 Stats = collections.namedtuple('Stats', 'NAME SIZE ALLOC FREE EXPANDSZ FRAG CAP DEDUP HEALTH ALTROOT'.lower())
 
 vdev_types = set('''
-    raidz
+    raidz1
     raidz2
     raidz3
     log

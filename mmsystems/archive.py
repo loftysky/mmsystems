@@ -93,11 +93,11 @@ def ingest_main():
 
     if args.checksum:
         checksum_path = os.path.join(meta_dir, 'index.txt')
-        print("Checksuming volume...")
+        print("Writing checksums into {}".format(checksum_path))
         index_create_main([
-            '-o', checksum_path,
-            '--auto-start',
             '--verbose',
+            '--auto-start',
+            '--out', checksum_path,
             args.root
         ])
         return

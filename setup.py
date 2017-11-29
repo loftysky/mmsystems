@@ -24,6 +24,8 @@ setup(
             mmbackup-one = mmsystems.backup.one:main
             mmfileservers-status = mmsystems.fileservers.status:main
             mmindex-create = mmsystems.index.create:main
+            mmindex-dedup = mmsystems.index.dedup:main
+            mmindex-diff = mmsystems.index.diff:main
             mmmetrics-client = mmsystems.metrics.client:main
             mmmetrics-influx-query = mmsystems.metrics.influx:main_query
             mmmetrics-influx-write = mmsystems.metrics.influx:main_write

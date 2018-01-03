@@ -1,6 +1,7 @@
 from Queue import Queue
 import argparse
 import datetime
+import errno
 import math
 import os
 import sys
@@ -428,7 +429,13 @@ def delete_files(con, args):
                                 if args.dry_run:
                                     continue
                                 edir = os.path.join(Ddir, event)
-                                for i, name in enumerate(sorted(os.listdir(edir))):
+                                try:
+                                    names = os.listdir(edir)
+                                except OSError as e:
+                                    if e.errno == errno.ENOENT:
+                                        continue
+                                    raise
+                                for i, name in enumerate(sorted(names)):
                                     if i % 100 == 0:
                                         sys.stdout.write('.')
                                         sys.stdout.flush()

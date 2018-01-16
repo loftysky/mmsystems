@@ -94,6 +94,7 @@ def ingest_main():
     if args.checksum:
         checksum_path = os.path.join(meta_dir, 'index.txt')
         print("Writing checksums into {}".format(checksum_path))
+        makedirs(meta_dir)
         index_create_main([
             '--verbose',
             '--auto-start',

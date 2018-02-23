@@ -30,6 +30,8 @@ setup(
             mmmetrics-influx-query = mmsystems.metrics.influx:main_query
             mmmetrics-influx-write = mmsystems.metrics.influx:main_write
             
+            mminstall-maya = mmsystems.install.apps.maya:main
+            
         ''',
     },
 

@@ -21,11 +21,16 @@ setup(
         'console_scripts': '''
 
             mmarchive-ingest = mmsystems.archive:ingest_main
+
             mmbackup-one = mmsystems.backup.one:main
-            mmfileservers-status = mmsystems.fileservers.status:main
+
+            mmfileserver-disks = mmsystems.fileserver.disks:main
+            mmfileserver-ledctl = mmsystems.fileserver.ledctl:main
+
             mmindex-create = mmsystems.index.create:main
             mmindex-dedup = mmsystems.index.dedup:main
             mmindex-diff = mmsystems.index.diff:main
+
             mmmetrics-client = mmsystems.metrics.client:main
             mmmetrics-influx-query = mmsystems.metrics.influx:main_query
             mmmetrics-influx-write = mmsystems.metrics.influx:main_write

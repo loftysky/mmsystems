@@ -44,7 +44,7 @@ def main():
     con = mysql.Connect(
         host='127.0.0.1',
         user='zmuser',
-        passwd='xxx',
+        passwd='GK9CLtdD4zcEQ8LMYV',
         db='zm',
     )
 

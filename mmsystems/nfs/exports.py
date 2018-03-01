@@ -55,6 +55,11 @@ networks = {
     'openvpn': '10.90.1.0/24',
 }
 all_networks     = tuple(sorted(networks.values()))
+networks.update(
+    supes='10.10.5.0/24',
+    admin_workstations='10.10.3.44', # Mike.
+)
+
 authned_networks = ('main', 'ipsec', 'openvpn')
 main_networks    = ('main', 'ipsec')
 
@@ -73,14 +78,30 @@ if hostname == 'nx01.mm':
         dict(name='EDsource', networks=authned_networks),
         #dict(name='ITroot', networks=authned_networks),
 
-        dict(name='AnimationProjects', networks=main_networks),
         dict(name='BAroot', networks=main_networks),
         dict(name='digital_media', networks=main_networks),
         dict(name='GMroot', networks=main_networks),
         dict(name='MKroot', networks=main_networks),
-        #dict(name='PD01', networks=main_networks),
         dict(name='svn', networks=main_networks),
 
+    ]
+
+elif hostname == 'nx02.mm':
+
+    volumes = [
+        
+        dict(name='TerraBlock.bak', networks=['main']),
+        dict(name='BBQ-backup', networks=['main']),
+
+        #dict(name='archive', networks=['main']),
+        
+        dict(name='securitycams', networks=['supes', 'admin_workstations']),
+
+        dict(name='home', networks=authned_networks),
+        dict(name='masters', networks=authned_networks),
+        
+        dict(name='MM02b', networks=authned_networks),
+        dict(name='EditOnline', networks=authned_networks),
     ]
 
 else:

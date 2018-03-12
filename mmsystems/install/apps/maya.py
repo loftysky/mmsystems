@@ -22,8 +22,10 @@ def main():
     args = parser.parse_args()
 
     if os.getuid():
-        print 'Must be run as root.'
-        exit(1)
+        os.execvp('sudo', ['sudo',
+            'bash', '-c', 'source /usr/local/vee/environments/markmedia/master/etc/bashrc; exec "$0" "$@"',
+            sys.executable, __file__,
+        ] + sys.argv[1:])
 
     if sys.platform == 'darwin':
         installer = MacOSInstaller()

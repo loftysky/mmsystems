@@ -18,23 +18,23 @@ Device = collections.namedtuple('Device', 'host path')
 
 def iter_disks():
     
-    nx01 = SSHPool('nx01.mm')
-    nx02 = SSHPool('nx02.mm')
-
-    zpool_queue_1 = nx01.exec_command(zfs.zpool_list_command)
-    zpool_queue_2 = nx02.exec_command(zfs.zpool_list_command)
-    by_id_queue_1 = nx01.exec_command('''bash -c 'for x in $(ls -1 /dev/disk/by-id); do echo $(hostname) $x $(readlink /dev/disk/by-id/$x); done' ''')
-    by_id_queue_2 = nx02.exec_command('''bash -c 'for x in $(ls -1 /dev/disk/by-id); do echo $(hostname) $x $(readlink /dev/disk/by-id/$x); done' ''')
+    queues = []
+    for host in ('nx01.mm', 'nx02.mm', 'nx03.mm', 'nx04.mm'):
+        ssh = SSHPool(host)
+        zpool_queue = ssh.exec_command(zfs.zpool_list_command)
+        by_id_queue = ssh.exec_command('''bash -c 'for x in $(ls -1 /dev/disk/by-id); do echo $(hostname) $x $(readlink /dev/disk/by-id/$x); done' ''')
+        queues.append((ssh , zpool_queue, by_id_queue))
 
     pools = []
-    for q in zpool_queue_1, zpool_queue_2:
+    for _, q, _ in queues:
         new_pools = zfs.zpool_list(q.get()[0])
         pools.extend(new_pools)
 
     by_id_dir = '/dev/disk/by-id'
     devs_by_id = {}
     info_q_by_id = {}
-    for ssh, by_id_q in (nx01, by_id_queue_1), (nx02, by_id_queue_2):
+
+    for ssh, _, by_id_q in queues:
 
         for line in by_id_q.get()[0].splitlines():
 
@@ -43,7 +43,8 @@ def iter_disks():
                 continue
 
             host, id_, link = line.split()
-
+            host = re.sub(r'\.mm$', '', host)
+            
             # We only care about WWNs.
             if not id_.startswith('wwn-'):
                 continue

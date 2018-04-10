@@ -1,0 +1,69 @@
+#!/usr/bin/env python
+
+import argparse
+import subprocess
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--exclude-media', action='store_true')
+parser.add_argument('--include-junk', action='store_true')
+parser.add_argument('src')
+parser.add_argument('dst')
+args, unused = parser.parse_known_args()
+
+cmd = ['rsync']
+cmd.extend(unused)
+
+
+filters = []
+
+if not args.include_junk:
+    for pattern in '''
+        .afpDeleted*
+        .Trash
+        .Trashes
+        @Recycle
+    '''.strip().split():
+        filters.append('- {}'.format(pattern))
+
+if args.exclude_media:
+    for ext in '''
+        aac
+        aaf
+        ac3
+        aif
+        aiff
+        avi
+        dng
+        dpx
+        exr
+        jpeg
+        jpg
+        m2v
+        m4v
+        mov
+        mp3
+        mp4
+        mpeg
+        mpg
+        mts
+        mxf
+        png
+        r3d
+        tga
+        tif
+        tiff
+        vob
+        wav
+    '''.strip().split():
+        filters.append('- *.{}*'.format(''.join('[{}{}]'.format(x.upper(), x.lower()) for x in ext)))
+
+if filters:
+    cmd.append('--filter=merge /dev/fd/0')
+
+cmd.extend((args.src, args.dst))
+
+proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+proc.communicate('\n'.join(filters))
+exit(proc.wait())
+

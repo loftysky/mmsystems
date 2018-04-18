@@ -16,6 +16,7 @@ def check_call(cmd, **kwargs):
 def main():
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('-f', '--force', action='store_true')
     parser.add_argument('-I', '--skip-install', action='store_true')
     parser.add_argument('-L', '--skip-license', action='store_true')
     parser.add_argument('-V', '--version', default='2018')
@@ -41,6 +42,10 @@ class BaseInstaller(object):
 
     def exit_context(self):
         pass
+
+    @property
+    def is_installed(self):
+        raise NotImplementedError('is_installed')
 
     def install(self):
         raise NotImplementedError('install')
@@ -85,17 +90,30 @@ class BaseInstaller(object):
             self.pit_path,
         ])
 
+    def assert_farmsoup(self, resource):
+        farmsoup_line = '''WORKER_RESOURCES['{}'] = 'Inf' # mminstall-maya'''.format(resource)
+        farmsoup_path = '/etc/farmsoup.py'
+        farmsoup_done = os.path.exists(farmsoup_path) and farmsoup_line in open(farmsoup_path).read()
+        if not farmsoup_done:
+            check_call(['sudo', 'bash', '-c', 'echo "{}" >> {}'.format(farmsoup_line, farmsoup_path)])
 
-    def run(self, version, skip_install=False, skip_license=False, **_):
+    def setup_farmsoup(self):
+        self.assert_farmsoup('maya')
+        self.assert_farmsoup('maya{}'.format(self.version))
+        if self.version in ('2018', ):
+            self.assert_farmsoup('mtoa2018')
+
+    def run(self, version, force=False, skip_install=False, skip_license=False, **_):
         self.version = version
         try:
             self.enter_context()
-            if not skip_install:
+            if force or (not skip_install and not self.is_installed):
                 self.install()
             if not skip_license:
                 self.setup_license_env()
                 self.setup_flexnet()
                 self.setup_adlmreg()
+            self.setup_farmsoup()
         finally:
             self.exit_context()
 
@@ -122,6 +140,10 @@ class MacOSInstaller(BaseInstaller):
     @property
     def pkg_root(self):
         return os.path.join(self.mount, 'Install Maya {}.app/Contents/Packages'.format(self.version))
+
+    @property
+    def is_installed(self):
+        return os.path.exists('/Applications/Autodesk/maya2018/Maya.app')
 
     def install(self):
 
@@ -158,6 +180,10 @@ class LinuxInstaller(BaseInstaller):
     def pkg_root(self):
         return '/Volumes/CGroot/systems/software/Autodesk/Maya/{}/linux/maya'.format(self.version)
 
+    @property
+    def is_installed(self):
+        return os.path.exists('/usr/autodesk/maya2018/bin/maya')
+
     def install(self):
 
         # Dependencies.
@@ -179,6 +205,8 @@ class LinuxInstaller(BaseInstaller):
                 continue
 
             check_call(['rpm', '-i', '--force', os.path.join(self.pkg_root, pkg_name)])
+
+        check_call(['/Volumes/CGroot/systems/software/SolidAngle/MtoA-2.1.0.3-linux-{}.run'.format(self.version), 'silent'])
 
     @property
     def maya_bin(self):

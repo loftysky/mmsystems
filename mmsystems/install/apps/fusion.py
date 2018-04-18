@@ -21,7 +21,7 @@ def main_render():
         print("Already installed.")
 
     else:
-        check_call(['sudo', 'yum', 'install', 'y',
+        check_call(['sudo', 'yum', 'install', '-y',
             'fuse-libs', # For installer.
             'Xvfb', # For headless render.
         ])

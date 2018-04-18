@@ -36,6 +36,7 @@ setup(
             mmmetrics-influx-write = mmsystems.metrics.influx:main_write
             
             mminstall-maya = mmsystems.install.apps.maya:main
+            mminstall-fusion-render = mmsystems.install.apps.fusion:main_render
             
         ''',
     },

@@ -1,6 +1,6 @@
 import os
-
 from setuptools import setup, find_packages
+
 
 setup(
     name='mmsystems',
@@ -36,6 +36,7 @@ setup(
             mmmetrics-influx-write = mmsystems.metrics.influx:main_write
             
             mminstall-maya = mmsystems.install.apps.maya:main
+            mminstall-arnold = mmsystems.install.apps.arnold:main
             mminstall-fusion-render = mmsystems.install.apps.fusion:main_render
             
         ''',

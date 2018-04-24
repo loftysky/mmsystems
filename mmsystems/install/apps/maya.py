@@ -4,7 +4,7 @@ import os
 import subprocess
 
 from mmsystems import hdiutil
-
+from mmsystems.sudo import reexec_sudo
 
 
 def check_call(cmd, **kwargs):
@@ -17,16 +17,17 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--force', action='store_true')
-    parser.add_argument('-I', '--skip-install', action='store_true')
-    parser.add_argument('-L', '--skip-license', action='store_true')
     parser.add_argument('-V', '--version', default='2018')
+
+    parser.add_argument('--no-install', action='store_true')
+    parser.add_argument('--no-license', action='store_true')
+
+    parser.add_argument('--no-sudo', action='store_true')
+
     args = parser.parse_args()
 
-    if os.getuid():
-        os.execvp('sudo', ['sudo',
-            'bash', '-c', 'source /usr/local/vee/environments/markmedia/master/etc/bashrc; exec "$0" "$@"',
-            sys.executable, __file__,
-        ] + sys.argv[1:])
+    if not args.no_sudo:
+        reexec_sudo()
 
     if sys.platform == 'darwin':
         installer = MacOSInstaller()
@@ -103,13 +104,13 @@ class BaseInstaller(object):
         if self.version in ('2018', ):
             self.assert_farmsoup('mtoa2018')
 
-    def run(self, version, force=False, skip_install=False, skip_license=False, **_):
+    def run(self, version, force=False, no_install=False, no_license=False, **_):
         self.version = version
         try:
             self.enter_context()
-            if force or (not skip_install and not self.is_installed):
+            if force or (not no_install and not self.is_installed):
                 self.install()
-            if not skip_license:
+            if not no_license:
                 self.setup_license_env()
                 self.setup_flexnet()
                 self.setup_adlmreg()
@@ -157,17 +158,15 @@ class MacOSInstaller(BaseInstaller):
 
                 if not pkg_name.endswith('.pkg'):
                     continue
-                if pkg_name in ('MtoA.pkg', ):
+
+                # We have a dedicated Arnold installer.
+                if 'mtoa' in pkg_name.lower():
                     continue
-                
+
                 print '==>', pkg_name
 
                 pkg_path = os.path.join(pkg_dir, pkg_name)
                 check_call(['installer', '-verbose', '-target', '/', '-pkg', pkg_path])
-
-        pkg_path = '/Volumes/CGroot/systems/software/SolidAngle/MtoA-3.0.0.2-darwin-2018.pkg'
-        check_call(['installer', '-verbose', '-target', '/', '-pkg', pkg_path])
-
 
     @property
     def maya_bin(self):
@@ -180,6 +179,7 @@ class MacOSInstaller(BaseInstaller):
     @property
     def pit_path(self):
         return '/Library/Application Support/Autodesk/Adlm/PIT/{}/MayaConfig.pit'.format(self.version)
+
 
 class LinuxInstaller(BaseInstaller):
 
@@ -212,8 +212,6 @@ class LinuxInstaller(BaseInstaller):
                 continue
 
             check_call(['rpm', '-i', '--force', os.path.join(self.pkg_root, pkg_name)])
-
-        check_call(['/Volumes/CGroot/systems/software/SolidAngle/MtoA-3.0.0.2-linux-{}.run'.format(self.version), 'silent'])
 
     @property
     def maya_bin(self):

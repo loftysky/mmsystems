@@ -154,13 +154,20 @@ class MacOSInstaller(BaseInstaller):
                 continue
 
             for pkg_name in os.listdir(pkg_dir):
+
                 if not pkg_name.endswith('.pkg'):
                     continue
-
+                if pkg_name in ('MtoA.pkg', ):
+                    continue
+                
                 print '==>', pkg_name
 
                 pkg_path = os.path.join(pkg_dir, pkg_name)
                 check_call(['installer', '-verbose', '-target', '/', '-pkg', pkg_path])
+
+        pkg_path = '/Volumes/CGroot/systems/software/SolidAngle/MtoA-3.0.0.2-darwin-2018.pkg'
+        check_call(['installer', '-verbose', '-target', '/', '-pkg', pkg_path])
+
 
     @property
     def maya_bin(self):
@@ -206,7 +213,7 @@ class LinuxInstaller(BaseInstaller):
 
             check_call(['rpm', '-i', '--force', os.path.join(self.pkg_root, pkg_name)])
 
-        check_call(['/Volumes/CGroot/systems/software/SolidAngle/MtoA-2.1.0.3-linux-{}.run'.format(self.version), 'silent'])
+        check_call(['/Volumes/CGroot/systems/software/SolidAngle/MtoA-3.0.0.2-linux-{}.run'.format(self.version), 'silent'])
 
     @property
     def maya_bin(self):

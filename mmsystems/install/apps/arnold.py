@@ -28,6 +28,13 @@ def main():
             'silent', # Accept the EULA, etc..
         ])
 
+    for resource in ('mtoa', 'mtoa{}'.format(args.maya_version)):
+        farmsoup_line = '''WORKER_RESOURCES['{}'] = 'Inf' # mminstall-arnold'''.format(resource)
+        farmsoup_path = '/etc/farmsoup.py'
+        farmsoup_done = os.path.exists(farmsoup_path) and farmsoup_line in open(farmsoup_path).read()
+        if not farmsoup_done:
+            subprocess.check_call(['bash', '-c', 'echo "{}" >> {}'.format(farmsoup_line, farmsoup_path)])
+
 
 if __name__ == '__main__':
     main()

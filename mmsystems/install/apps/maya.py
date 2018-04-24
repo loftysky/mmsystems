@@ -101,8 +101,6 @@ class BaseInstaller(object):
     def setup_farmsoup(self):
         self.assert_farmsoup('maya')
         self.assert_farmsoup('maya{}'.format(self.version))
-        if self.version in ('2018', ):
-            self.assert_farmsoup('mtoa2018')
 
     def run(self, version, force=False, no_install=False, no_license=False, **_):
         self.version = version

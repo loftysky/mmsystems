@@ -11,7 +11,7 @@ import psutil
 import yaml
 
 from .smart import parse_info as parse_smart
-from .index.create import main as index_create_main
+from uindex.create import main as index_create_main
 
 
 def makedirs(path):

@@ -16,13 +16,15 @@ def check_call(cmd, **kwargs):
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--force', action='store_true')
+
     parser.add_argument('-V', '--version', default='2018')
+    parser.add_argument('--minor-version', default='latest')
 
-    parser.add_argument('--no-install', action='store_true')
-    parser.add_argument('--no-license', action='store_true')
+    parser.add_argument('-r', '--reinstall', action='store_true')
+    parser.add_argument('-l', '--license', action='store_true')
+    parser.add_argument('-F', '--farmsoup', action='store_true')
 
-    parser.add_argument('--no-sudo', action='store_true')
+    parser.add_argument('-S', '--no-sudo', action='store_true')
 
     args = parser.parse_args()
 
@@ -102,30 +104,28 @@ class BaseInstaller(object):
         self.assert_farmsoup('maya')
         self.assert_farmsoup('maya{}'.format(self.version))
 
-    def run(self, version, force=False, no_install=False, no_license=False, **_):
+    def run(self, version, minor_version='latest', reinstall=False, license=False, farmsoup=False, **_):
         self.version = version
+        self.minor_version = minor_version
         try:
             self.enter_context()
-            if force or (not no_install and not self.is_installed):
+            if reinstall or not self.is_installed:
                 self.install()
-            if not no_license:
+            if license:
                 self.setup_license_env()
                 self.setup_flexnet()
                 self.setup_adlmreg()
-            self.setup_farmsoup()
+            if farmsoup:
+                self.setup_farmsoup()
         finally:
             self.exit_context()
 
 
 class MacOSInstaller(BaseInstaller):
 
-    dmg_paths = {
-        '2018': '/Volumes/CGroot/systems/software/Autodesk/Maya/2018/macos/Autodesk_Maya_2018_1_Update_EN_JP_ZH_Mac_OSX.dmg',
-    }
-
     @property
     def dmg_path(self):
-        return self.dmg_paths[self.version]
+        return '/Volumes/CGroot/systems/software/Autodesk/Maya/{}/macos/{}.dmg'.format(self.version, self.minor_version)
 
     did_mount = False
 
@@ -183,7 +183,7 @@ class LinuxInstaller(BaseInstaller):
 
     @property
     def pkg_root(self):
-        return '/Volumes/CGroot/systems/software/Autodesk/Maya/{}/linux/maya'.format(self.version)
+        return '/Volumes/CGroot/systems/software/Autodesk/Maya/{}/linux/{}'.format(self.version, self.minor_version)
 
     @property
     def is_installed(self):

@@ -12,11 +12,12 @@ def main_query():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-U', '--url', default='http://influxdb.mm')
+    parser.add_argument('-D', '--database', default='metrics')
     parser.add_argument('query')
     args = parser.parse_args()
 
     url = urljoin(args.url, '/query')
-    res = requests.post(url, data=dict(q=args.query))
+    res = requests.post(url, params=dict(db=args.database), data=dict(q=args.query))
     print json.dumps(res.json(), sort_keys=True, indent=4)
 
 

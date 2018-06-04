@@ -32,8 +32,8 @@ setup(
             mmindex-diff = mmsystems.index.diff:main
 
             mmmetrics-client = mmsystems.metrics.client:main
-            mmmetrics-influx-query = mmsystems.metrics.influx:main_query
-            mmmetrics-influx-write = mmsystems.metrics.influx:main_write
+            mmmetrics-influx-query = mmsystems.metrics.servers.influx:main_query
+            mmmetrics-influx-write = mmsystems.metrics.servers.influx:main_write
             
             mminstall-maya = mmsystems.install.apps.maya:main
             mminstall-arnold = mmsystems.install.apps.arnold:main

@@ -1,6 +1,7 @@
 import re
 import os
 import errno
+import subprocess
 
 import psutil
 
@@ -10,6 +11,40 @@ from ...zfs import zpool_list
 
 
 KEYS = ('read_count', 'write_count', 'read_bytes', 'write_bytes', 'read_time', 'write_time')
+
+
+_wwn_sn_cache = {}
+def _wwn_to_sn(wwn):
+
+    if not wwn:
+        return
+
+    try:
+        return _wwn_sn_cache[wwn]
+    except KeyError:
+        pass
+
+    try:
+        stdout = subprocess.check_output(['smartctl', '-i', '/dev/disk/by-id/{}'.format(wwn)])
+    except subprocess.CalledProcessError:
+        _wwn_sn_cache[wwn] = None
+        return
+
+    m = re.search(r'Serial Number:\s*(\S+)', stdout, flags=re.I)
+    sn = m.group(1) if m else None
+    _wwn_sn_cache[wwn] = sn
+    return sn
+
+
+def _get_wwn_map():
+    res = {}
+    for name in os.listdir('/dev/disk/by-id'):
+        m = re.match(r'^wwn-0x[0-9a-fA-F]+$', name)
+        if not m:
+            continue
+        dst = os.path.basename(os.readlink('/dev/disk/by-id/{}'.format(name)))
+        res[dst] = name
+    return res
 
 
 def iter_metrics(include_devices=None, exclude_devices=None, tags_by_name=None, aggregators=None):
@@ -41,9 +76,12 @@ def iter_metrics(include_devices=None, exclude_devices=None, tags_by_name=None, 
     # Sum it all.
     all_data = utils.aggregate_namedtuples(all_data, aggregators)
 
+    wwn_map = _get_wwn_map()
+
     for name, (data, agg_tags) in sorted(all_data.iteritems()):
         tags = dict(tags_by_name.get(name) or {}) if tags_by_name else {}
         tags.update(agg_tags)
+        tags['serial'] = _wwn_to_sn(wwn_map.get(name))
         tags.setdefault('name', name)
         yield Metrics('disk.io', 'disk.io.{host}.{name}', tags, data._asdict())
 

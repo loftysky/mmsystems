@@ -43,11 +43,11 @@ class Metrics(object):
 
         name = self.influx_name
         if self.tags:
-            name = '{},{}'.format(name, ','.join('{}={}'.format(k, v) for k, v in sorted(self.tags.iteritems())))
+            name = '{},{}'.format(name, ','.join('{}={}'.format(k, v) for k, v in sorted(self.tags.iteritems()) if v is not None))
 
         return '{} {} {}'.format(
             name,
-            ','.join('{}={}'.format(k, v) for k, v in sorted(self.fields.iteritems())),
+            ','.join('{}={}'.format(k, v) for k, v in sorted(self.fields.iteritems()) if v is not None),
             timestamp,
         )
 

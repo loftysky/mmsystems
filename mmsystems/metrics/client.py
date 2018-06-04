@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+from Queue import Empty
 import argparse
 import cPickle as pickle
 import socket
@@ -10,6 +11,7 @@ import requests
 
 from .sources import cpu
 from .sources import disks
+from .sources import iolag
 from .sources import mem
 from .sources import net
 from .sources import nfs
@@ -32,12 +34,15 @@ def main():
     parser.add_argument('-N', '--nfs-server', action='store_true')
     parser.add_argument('-z', '--zfs', action='store_true')
 
+    parser.add_argument('-l', '--io-lag', action='append')
+
     parser.add_argument('--influx', default='http://influx.mm')
     parser.add_argument('-D', '--influx-database', default='metrics')
     parser.add_argument('--graphite', default='graphite.mm:2004')
     parser.add_argument('-P', '--graphite-prefix', default='')
     parser.add_argument('-I', '--no-influx', action='store_true')
     parser.add_argument('-G', '--no-graphite', action='store_true')
+
     parser.add_argument('-i', '--interval', type=int, default=10)
 
     parser.add_argument('-v', '--verbose', action='store_true')
@@ -86,11 +91,33 @@ def main():
 
 
     now = time.time()
-    next_time = 5 * (int(now) / 5)
+    next_time = args.interval * (int(now) / args.interval)
+
+    metric_queues = []
+
+    for spec in args.io_lag:
+        parts = spec.split(':', 1)
+        if len(parts) == 1:
+            path = spec
+            name = os.path.basename(path)
+        else:
+            name, path = parts
+        metric_queues.append(iolag.start(name, path, next_time - (2.5 * args.interval), args.interval))
 
     while True:
 
+        # Get all immediate metrics.
         all_metrics = list(iter_many_metrics())
+
+        # Get all defered metrics.
+        for queue in metric_queues:
+            try:
+                while True:
+                    metric = queue.get(False)
+                    all_metrics.append(metric)
+            except Empty:
+                pass
+
         for m in all_metrics:
             m.time = m.time or now
 

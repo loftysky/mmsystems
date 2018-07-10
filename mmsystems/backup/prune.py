@@ -47,8 +47,9 @@ def label_snapshots(snapshots):
 
     for i, (name, ctime) in enumerate(sorted(snapshots)):
 
-        if not i:
-            by_period[(4, 'first', None)] = name
+        #if not i:
+        #    by_period[(4, 'first', None)] = name
+        
         if i + 1 == len(snapshots):
             by_period[(-1, 'latest', None)] = name
 
@@ -60,22 +61,23 @@ def label_snapshots(snapshots):
 
         days = (now - ctime).days
 
-        # Always keep the monthly one.
-        month = ctime.replace(day=1, hour=0, minute=0, second=0)
-        by_period.setdefault((3, 'monthly', month), name)
+        # Monthly for 6 months:
+        if days < 6 * 31:
+            month = ctime.replace(day=1, hour=0, minute=0, second=0)
+            by_period.setdefault((3, 'monthly', month), name)
 
         # Weekly for ~2 months:
-        if days <= 62:
+        if days < 2 * 31:
             week = (ctime - datetime.timedelta(days=ctime.weekday())).replace(hour=0, minute=0, second=0)
             by_period.setdefault((2, 'weekly', week), name)
 
         # Daily for 2 weeks.
-        if days <= 14:
+        if days < 14:
             day = ctime.replace(hour=0, minute=0, second=0)
             by_period.setdefault((1, 'daily', day), name)
 
         # All for 1 week.
-        if days <= 7:
+        if days < 7:
             by_period[(0, 'all', ctime)] = name
     
     to_keep.update({name: label for (_, label, _), name in sorted(by_period.iteritems(), reverse=True)})

@@ -7,6 +7,7 @@ import os
 import sys
 import threading
 import time
+import traceback
 
 sys.path.append('/usr/local/vee/environments/markmedia/master/lib64/python2.7/site-packages')
 
@@ -398,7 +399,10 @@ def delete_files(con, args):
             path = queue.get()
             if not path:
                 queue.put(None) # Cascade a shutdown.
-            os.unlink(path)
+            try:
+                os.unlink(path)
+            except:
+                traceback.print_exc()
 
     n_threads = 32
     queue = Queue(n_threads)

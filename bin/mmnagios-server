@@ -1,0 +1,65 @@
+#!/usr/bin/env python
+
+from __future__ import print_function
+
+from wsgiref.simple_server import make_server
+import argparse
+import re
+import time
+import socket
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-H', '--host', default='')
+parser.add_argument('-p', '--port', type=int, default=8002)
+parser.add_argument('-n', '--dry-run', action='store_true')
+parser.add_argument('--command-pipe', default='/var/spool/nagios/cmd/nagios.cmd')
+args = parser.parse_args()
+
+
+def abort(start, message=''):
+    start('400 Bad Request', [])
+    return [message]
+
+def app(environ, start):
+
+    size = int(environ.get('CONTENT_LENGTH') or 0)
+    if not size:
+        return abort(start, "Request has no body.\n")
+
+    input_ = environ['wsgi.input'].read(size)
+    check = re.sub(r'\s+', ' ', input_.strip())
+
+    if input_ != check:
+        return abort(start, "Input is not normalized.\n")
+    if input_.count(';') != 3:
+        return abort(start, "Input is malformed.\n")
+        
+    hostname, service, severity, message = input_.split(';')
+
+    remote_addr = environ['REMOTE_ADDR']
+    try:
+        service_addr = socket.gethostbyname(hostname)
+    except socket.gaierror:
+        return abort(start, "Hostname '{}' could not be resolved.".format(hostname))
+
+    if remote_addr != service_addr:
+        return abort(start, "Your IP ({}) does not match '{}'s IP ({}).\n".format(remote_addr, hostname, service_addr))
+
+    line = '[{}] PROCESS_SERVICE_CHECK_RESULT;{}'.format(
+        int(time.time()),
+        input_
+    )
+    print(line)
+
+    if not args.dry_run:
+        with open(args.command_pipe, 'w') as fh:
+            fh.write(line)
+
+    start('200 OK', [])
+    return ['']
+
+
+httpd = make_server(args.host, args.port, app)
+httpd.serve_forever()
+

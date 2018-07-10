@@ -1,0 +1,29 @@
+#!/usr/bin/env python
+
+from __future__ import print_function
+
+import argparse
+import urllib
+import socket
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-u', '--url', default='http://nagios.mm')
+parser.add_argument('-s', '--severity', type=int)
+parser.add_argument('-r', '--retcode', type=int)
+parser.add_argument('-H', '--hostname', default=socket.gethostname())
+parser.add_argument('service')
+parser.add_argument('message')
+args = parser.parse_args()
+
+
+if args.severity is None:
+    args.severity = 2 if args.retcode else 0
+
+
+res = urllib.urlopen(args.url, ';'.join((args.hostname, args.service, str(args.severity), args.message)))
+code = res.getcode()
+if code != 200:
+    print(res.read().strip())
+    exit(code)
+

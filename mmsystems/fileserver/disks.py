@@ -19,7 +19,7 @@ Device = collections.namedtuple('Device', 'host path')
 def iter_disks():
     
     queues = []
-    for host in ('nx01.mm', 'nx02.mm', 'nx03.mm', 'nx04.mm'):
+    for host in ('nx01.mm', 'nx02.mm', ): #'nx03.mm', 'nx04.mm'):
         ssh = SSHPool(host)
         zpool_queue = ssh.exec_command(zfs.zpool_list_command)
         by_id_queue = ssh.exec_command('''bash -c 'for x in $(ls -1 /dev/disk/by-id); do echo $(hostname) $x $(readlink /dev/disk/by-id/$x); done' ''')

@@ -193,13 +193,14 @@ class LinuxInstaller(BaseInstaller):
 
         # Dependencies.
         check_call(['yum', 'install', '-y', 
-            'libXp',
-            'libpng12',
+            'compat-libtiff3',
             'gamin',
-            'xorg-x11-fonts-75dpi.noarch',
+            'libpng12',
+            'libXp',
             'xorg-x11-fonts-100dpi.noarch',
-            'xorg-x11-fonts-ISO8859-1-75dpi.noarch',
+            'xorg-x11-fonts-75dpi.noarch',
             'xorg-x11-fonts-ISO8859-1-100dpi.noarch',
+            'xorg-x11-fonts-ISO8859-1-75dpi.noarch',
         ])
 
         for pkg_name in os.listdir(self.pkg_root):

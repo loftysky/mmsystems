@@ -33,11 +33,15 @@ def app(environ, start):
     if input_ != check:
         return abort(start, "Input is not normalized.\n")
     if input_.count(';') != 3:
-        return abort(start, "Input is malformed.\n")
+        return abort(start, "Input is malformed; expected '<hostname>;<service>;<severity>;<message>'\n")
         
     hostname, service, severity, message = input_.split(';')
 
     remote_addr = environ['REMOTE_ADDR']
+    forwarded_for = environ.get('HTTP_X_FORWARDED_FOR')
+    if remote_addr == '127.0.0.1' and forwarded_for:
+        remote_addr = forwarded_for.split(',')[-1].strip()
+
     try:
         service_addr = socket.gethostbyname(hostname)
     except socket.gaierror:

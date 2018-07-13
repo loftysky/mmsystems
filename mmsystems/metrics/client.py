@@ -34,9 +34,9 @@ def main():
     parser.add_argument('-N', '--nfs-server', action='store_true')
     parser.add_argument('-z', '--zfs', action='store_true')
 
-    parser.add_argument('-l', '--io-lag', action='append')
+    parser.add_argument('-l', '--io-lag', action='append', default=[])
 
-    parser.add_argument('--influx', default='http://influx.mm')
+    parser.add_argument('--influx', default='http://influxdb.mm')
     parser.add_argument('-D', '--influx-database', default='metrics')
     parser.add_argument('--graphite', default='graphite.mm:2004')
     parser.add_argument('-P', '--graphite-prefix', default='')

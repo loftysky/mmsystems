@@ -58,7 +58,7 @@ def app(environ, start):
 
     if not args.dry_run:
         with open(args.command_pipe, 'w') as fh:
-            fh.write(line)
+            fh.write(line + '\n')
 
     start('200 OK', [])
     return ['']

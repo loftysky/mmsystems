@@ -10,21 +10,45 @@ from mmsystems.backup.prune import label_snapshots
 
 
 parser = argparse.ArgumentParser()
+
+parser.add_argument('-e', '--exclude', action='append', default=[])
+parser.add_argument('-i', '--include', action='append', default=[])
 parser.add_argument('-n', '--dry-run', action='store_true')
 parser.add_argument('-v', '--verbose', action='store_true')
 parser.add_argument('-y', '--yes', action='store_true')
+
 args = parser.parse_args()
 
 
-raw = subprocess.check_output(['sudo', 'zfs', 'list', '-tsnapshot'])
-raw = raw.splitlines()
-raw.pop(0)
-snapshots = [x.split()[0] for x in raw]
-
 by_volume = {}
-for snapshot in snapshots:
-    volume, raw_ctime = snapshot.split('@', 1)
-    by_volume.setdefault(volume, []).append((snapshot, raw_ctime))
+
+for line in subprocess.check_output(['sudo', 'zfs', 'list', '-H', '-o', 'name,mm.backup:prune']).splitlines():
+    
+    line = line.strip()
+    if not line:
+        continue
+    volume, do_prune = line.strip().split('\t')
+
+    if volume in args.exclude:
+        print "Skipping excluded", volume, "."
+        continue
+    if volume not in args.include and do_prune.upper() not in ('1', 'Y', 'YES', 'T', 'TRUE'):
+        if args.verbose:
+            print "Skipping", volume, "because `mm.backup:prune` is not set."
+        continue
+
+    for line in subprocess.check_output(['sudo', 'zfs', 'list',
+        '-t', 'snapshot',
+        '-r', '-d', '1',
+        '-H', '-o', 'name',
+        volume,
+    ]).splitlines():
+        snapshot = line.strip()
+        if not snapshot:
+            continue
+        raw_ctime = snapshot.split('@', 1)[1]
+        by_volume.setdefault(volume, []).append((snapshot, raw_ctime))
+
 
 for volume, snapshots in sorted(by_volume.iteritems()):
 

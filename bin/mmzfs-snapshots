@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 
-from mmsystems.backup.prune import label_snapshots
+from mmsystems.backup.prune import label_snapshots, parse_datetime
 
 
 IGNORE_NAMES = set('''
@@ -55,37 +55,44 @@ def destroy(snapshot):
 
 code = 0
 
-for line in subprocess.check_output(['sudo', 'zfs', 'list', '-H', '-o', 'name,mm:auto-snapshot']).splitlines():
+for line in subprocess.check_output(['sudo', 'zfs', 'list', '-H', '-o', 'name,mm:auto-snapshot,mm:auto-prune']).splitlines():
     
     line = line.strip()
     if not line:
         continue
-    volume, is_auto = line.strip().split('\t')
+
+    volume, is_auto_snap, is_auto_prune = line.strip().split('\t')
+
+    is_auto_snap  = is_auto_snap in ('1', 'Y', 'YES', 'T', 'TRUE')
+    is_auto_prune = is_auto_prune in ('1', 'Y', 'YES', 'T', 'TRUE')
+
+    do_this_snap = is_auto_snap
+    do_this_prune = do_this_snap or is_auto_prune
 
     if args.volumes:
-        if volume not in args.volumes:
-            continue
-    else:
-        if volume in args.exclude:
-            if args.verbose:
-                print "Skipping excluded", volume, "."
-            continue
-        elif volume in args.include:
-            pass
-        elif is_auto.upper() in ('1', 'Y', 'YES', 'T', 'TRUE'):
-            pass
+        if volume in args.volumes:
+            do_this_snap = do_this_prune = True
         else:
-            if args.verbose > 1:
-                print "Skipping", volume, "because `mm:auto-snapshot` is not set."
             continue
 
+    if volume in args.include:
+        do_this_snap = do_this_prune = True
+
+    if volume in args.exclude:
+        if args.verbose:
+            print "Skipping excluded", volume, "."
+        continue
+
+    if not (do_this_snap or do_this_prune):
+        continue
+    
     if args.verbose:
         print
         print volume
         print '=' * 20
 
 
-    if do_snapshot:
+    if do_this_snap and do_snapshot:
         cmd = ['sudo', 'zfs', 'snapshot', '{}@{}'.format(volume, timestamp)]
         if args.verbose > 1:
             print '$', ' '.join(cmd)
@@ -96,6 +103,8 @@ for line in subprocess.check_output(['sudo', 'zfs', 'list', '-H', '-o', 'name,mm
                 print 'ERROR: Non-zero return code {} from: {}'.format(this_code, ' '.join(cmd))
                 continue
 
+    if not do_this_prune:
+        continue
     if not (do_prune_timed or do_prune_empty):
         continue
 
@@ -112,7 +121,10 @@ for line in subprocess.check_output(['sudo', 'zfs', 'list', '-H', '-o', 'name,mm
             continue
         snapshot, used, nonempty = line.split('\t')
         raw_ctime = snapshot.split('@', 1)[1]
-        snapshots.append((snapshot, raw_ctime, int(used), nonempty))
+        ctime = parse_datetime(raw_ctime)
+        if not ctime:
+            continue
+        snapshots.append((snapshot, ctime, int(used), nonempty))
 
     snapshots.sort()
 

@@ -12,6 +12,8 @@ import sys
 
 from mmcore.configfile import ConfigFile
 
+import netaddr
+
 
 named_networks = {
 
@@ -49,13 +51,6 @@ def resolve_networks(x):
 def _resolve_networks(x):
 
     while isinstance(x, basestring):
-
-        if re.search(r'\.[a-z]+$', x):
-            try:
-                yield socket.gethostbyname(x)
-            except socket.gaierror:
-                raise ValueError("Could not lookup {}".format(x))
-
         try:
             x = named_networks[x.lower()]
         except KeyError:
@@ -116,12 +111,30 @@ def main():
         if not os.path.exists(src_path):
             raise ValueError("Source paths must exist.", src_path)
 
-        networks = resolve_networks(networks)
-
         if args.verbose:
             print('export({!r}, {!r}, {!r})'.format(name, src_path, networks))
 
-        exports[name] = dict(src_path=src_path, networks=networks)
+        networks = resolve_networks(networks)
+
+        if args.verbose:
+            print('    resolved: ', ', '.join(sorted(networks)))
+
+        ip_set = netaddr.IPSet()
+        new_networks = []
+        for x in networks:
+            if re.match(r'\d+\.', x):
+                ip_set.add(x)
+            else:
+                new_networks.append(x)
+        ip_set.compact()
+        for x in ip_set.iter_cidrs():
+            new_networks.append(str(x))
+        new_networks.sort()
+
+        if args.verbose:
+            print('    compacted:', ', '.join(sorted(new_networks)))
+
+        exports[name] = dict(src_path=src_path, networks=new_networks)
 
     namespace = dict(
         export=export,

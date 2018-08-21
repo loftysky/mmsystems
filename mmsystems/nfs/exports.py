@@ -1,90 +1,200 @@
 #!usr/bin/env python
 
-header = '''
-# /etc/exports: the access control list for filesystems which may be exported
-#       to NFS clients.  See exports(5).
-#
-# Example for NFSv2 and NFSv3:
-# /srv/homes       hostname1(rw,sync,no_subtree_check) hostname2(ro,sync,no_subtree_check)
-#
-# Example for NFSv4:
-# /srv/nfs4        gss/krb5i(rw,sync,fsid=0,crossmnt,no_subtree_check)
-# /srv/nfs4/homes  gss/krb5i(rw,sync,no_subtree_check)
-'''.lstrip()
+from __future__ import print_function
 
 import argparse
 import os
+import re
 import shutil
-import sys
 import socket
+import subprocess
+import sys
 
-parser = argparse.ArgumentParser()
-parser.add_argument('-o', '--output', default='/etc/exports')
-parser.add_argument('-v', '--verbose', action='store_true')
-parser.add_argument('-n', '--dry-run', action='store_true')
-
-args = parser.parse_args()
+from mmcore.configfile import ConfigFile
 
 
+named_networks = {
 
-if args.output and not args.dry_run:
-    if os.path.exists(args.output):
-        shutil.copy(args.output, args.output + '.bak')
-    out = open(args.output + '.in-progress', 'w')
-else:
-    out = None
+    'all': '10.0.0.0/8',
 
-
-def write(x):
-    if args.verbose:
-        print x,
-    if out is not None:
-        out.write(x)
-
-write(header + '\n')
-
-
-# For NFSv4.
-write('/export 10.10.3.0/22(rw,fsid=0,insecure,crossmnt,no_subtree_check,async)\n')
-
-
-networks = {
-    'main': '10.10.0.0/16',
+    'wired': '10.10.0.0/16',
     'untrusted': '10.20.0.0/16',
+
+    'vpn': '10.90.0.0/16',
     'ipsec': '10.90.0.0/24',
     'openvpn': '10.90.1.0/24',
+
+    'network': '10.10.0.0/24',
+    'original': '10.10.1.0/24',
+    'fileservers': '10.10.2.0/24',
+    'workstations': '10.10.3.0/24',
+    'farm': '10.10.4.0/24',
+    'supes': '10.10.5.0/24',
+
+    'dhcp': '10.10.100.0/20', # This is a bit wide.
+
+    'core': ['network', 'original', 'fileservers', 'farm', 'supes', 'net_admins'],
+
+    'net_admins': ['mikeb.mm'],
+    'admins': ['mikeb.mm', 'yvanp.mm'],
+
+    'strong_authed': ['wired', 'ipsec'],
+    'weak_authed': ['wired', 'vpn'],
+
 }
-all_networks     = tuple(sorted(networks.values()))
-networks.update(
-    supes='10.10.5.0/24',
-    admin_workstations='10.10.3.44', # Mike.
-)
 
-authned_networks = ('main', 'ipsec', 'openvpn')
-main_networks    = ('main', 'ipsec')
+def resolve_networks(x):
+    return list(sorted(set(_resolve_networks(x))))
+
+def _resolve_networks(x):
+
+    while isinstance(x, basestring):
+
+        if re.search(r'\.[a-z]+$', x):
+            try:
+                yield socket.gethostbyname(x)
+            except socket.gaierror:
+                raise ValueError("Could not lookup {}".format(x))
+
+        try:
+            x = named_networks[x.lower()]
+        except KeyError:
+            break
+
+    if isinstance(x, basestring):
+        yield x
+
+    else:
+        for y in x:
+            for z in _resolve_networks(y):
+                yield z
 
 
-hostname = socket.gethostname()
 
-if hostname == 'nx01.mm':
 
-    volumes = [
+def main():
 
-        dict(name='scratch', networks=all_networks),
-        dict(name='ubuntu-16.04', networks=all_networks),
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('-n', '--dry-run', action='store_true')
+    parser.add_argument('-v', '--verbose', action='store_true')
+
+    parser.add_argument('-c', '--config', default='/etc/mmconfig/exports.py')
+
+    parser.add_argument('-a', '--all', action='store_true',
+        help="Same as -emfME.")
+
+    parser.add_argument('-e', '--exports', action='store_true',
+        help="Modify /etc/exports.")
+    parser.add_argument('-m', '--mkdir', action='store_true',
+        help="Make /export/VOLUME mount points.")
+    parser.add_argument('-f', '--fstab', action='store_true',
+        help="Modify /etc/fstab.")
+    parser.add_argument('-M', '--mount', action='store_true',
+        help="Auto-mount via `mount -a`.")
+    parser.add_argument('-E', '--exportfs', action='store_true',
+        help="Reload exports via `exportfs -ra`.")
+
+    args = parser.parse_args()
+
+    if args.all:
+        args.exports = args.mkdir = args.fstab = args.mount = args.exportfs = True
+
+    if not (args.dry_run or args.exports or args.mkdir or args.fstab or args.mount or args.exportfs):
+        print("Nothing to do. Please use -a, -n, or one of -emfME.", file=sys.stderr)
+        exit(1)
+
+    if not os.path.exists(args.config):
+        print("Could not find {}.".format(args.config), file=sys.stderr)
+        exit(2)
+
+    exports = {}
+    def export(name, src_path, networks):
         
-        dict(name='CGartifacts', networks=authned_networks),
-        dict(name='CGroot', networks=authned_networks),
-        dict(name='EDsource', networks=authned_networks),
-        #dict(name='ITroot', networks=authned_networks),
+        if src_path != os.path.abspath(src_path):
+            raise ValueError("Source paths must be absolute.", src_path)
+        if not os.path.exists(src_path):
+            raise ValueError("Source paths must exist.", src_path)
 
-        dict(name='BAroot', networks=main_networks),
-        dict(name='digital_media', networks=main_networks),
-        dict(name='GMroot', networks=main_networks),
-        dict(name='MKroot', networks=main_networks),
-        dict(name='svn', networks=main_networks),
+        networks = resolve_networks(networks)
 
-    ]
+        if args.verbose:
+            print('export({!r}, {!r}, {!r})'.format(name, src_path, networks))
+
+        exports[name] = dict(src_path=src_path, networks=networks)
+
+    namespace = dict(
+        export=export,
+    )
+    namespace.update({k.upper(): v for k, v in named_networks.items()})
+    execfile(args.config, namespace)
+
+
+    if args.exports:
+        update_etc_exports(exports, verbose=args.verbose, dry_run=args.dry_run)
+
+    if args.mkdir:
+        for name in exports:
+            path = os.path.join('/export', name)
+            if not os.path.lexists(path):
+                if args.verbose:
+                    print("mkdir {}".format(path))
+                if not args.dry_run:
+                    os.makedirs(path)
+
+    if args.fstab:
+        update_etc_fstab(exports, verbose=args.verbose, dry_run=args.dry_run)
+
+    if args.mount:
+        if not args.dry_run:
+            subprocess.check_call(['mount', '-a'])
+
+    if args.exportfs:
+        if not args.dry_run:
+            subprocess.check_call(['exportfs', '-ra'])
+
+
+def update_etc_exports(exports, verbose=False, dry_run=False):
+
+    chunks = []
+
+    for name, spec in sorted(exports.items()):
+        chunks.append('/export/{}'.format(name))
+        for network in spec['networks']:
+            chunks.append(' \\\n\t{}(rw,nohide,insecure,no_subtree_check,async,no_root_squash)'.format(network))    
+        chunks.append('\n')
+
+    config_str = ''.join(chunks)
+    if verbose:
+        print(config_str)
+
+    if not dry_run:
+        config = ConfigFile('/etc/exports')
+        config.set_content('mmnfs-exports', config_str)
+        config.dump()
+
+
+def update_etc_fstab(exports, verbose=False, dry_run=False):
+
+    chunks = []
+
+    for name, spec in sorted(exports.items()):
+        chunks.append('{} /export/{} none bind\n'.format(spec['src_path'], name))
+
+
+    config_str = ''.join(chunks)
+    if verbose:
+        print(config_str)
+
+    if not dry_run:
+        config = ConfigFile('/etc/fstab')
+        config.set_content('mmnfs-exports', config_str)
+        config.dump()
+
+
+'''
+
+
 
 elif hostname == 'nx02.mm':
 
@@ -120,3 +230,8 @@ if out is not None:
     out.close()
     shutil.move(args.output + '.in-progress', args.output)
 
+
+'''
+
+if __name__ == '__main__':
+    main()

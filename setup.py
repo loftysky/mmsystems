@@ -31,14 +31,16 @@ setup(
             mmindex-dedup = mmsystems.index.dedup:main
             mmindex-diff = mmsystems.index.diff:main
 
+            mminstall-maya = mmsystems.install.apps.maya:main
+            mminstall-arnold = mmsystems.install.apps.arnold:main
+            mminstall-fusion-render = mmsystems.install.apps.fusion:main_render
+
             mmmetrics-client = mmsystems.metrics.client:main
             mmmetrics-influx-query = mmsystems.metrics.servers.influx:main_query
             mmmetrics-influx-write = mmsystems.metrics.servers.influx:main_write
             
-            mminstall-maya = mmsystems.install.apps.maya:main
-            mminstall-arnold = mmsystems.install.apps.arnold:main
-            mminstall-fusion-render = mmsystems.install.apps.fusion:main_render
-            
+            mmnfs-exports = mmsystems.nfs.exports:main
+
         ''',
     },
 

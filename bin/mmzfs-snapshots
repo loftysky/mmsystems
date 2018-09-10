@@ -159,7 +159,9 @@ for line in subprocess.check_output(['sudo', 'zfs', 'list', '-H', '-o', 'name,mm
                     if not line:
                         continue
 
-                    type_, path = line.split('\t')
+                    line_parts = line.split('\t')
+                    path = line_parts[1]
+
                     name = os.path.basename(path)
                     if name in IGNORE_NAMES:
                         continue

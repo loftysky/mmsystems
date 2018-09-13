@@ -32,7 +32,7 @@ parser.add_argument('volumes', nargs='?')
 args = parser.parse_args()
 
 
-timestamp = time.strftime('%Y-%m-%dT%H%z')
+timestamp = time.strftime('%Y-%m-%dT%H:%M:%S%z')
 
 
 do_snapshot = args.command in ('auto', 'snapshot')

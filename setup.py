@@ -39,7 +39,7 @@ setup(
             mmmetrics-influx-query = mmsystems.metrics.servers.influx:main_query
             mmmetrics-influx-write = mmsystems.metrics.servers.influx:main_write
             
-            mmnfs-exports = mmsystems.nfs.exports:main
+            mmexports = mmsystems.exports:main
 
         ''',
     },

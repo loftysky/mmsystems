@@ -12,6 +12,7 @@ import requests
 from .sources import cpu
 from .sources import disks
 from .sources import iolag
+from .sources import sensors
 from .sources import mem
 from .sources import net
 from .sources import nfs
@@ -29,6 +30,7 @@ def main():
     parser.add_argument('--nfs-client', action='store_true')
     parser.add_argument('-c', '--cpu', action='store_true')
     parser.add_argument('-d', '--disks', action='store_true')
+    parser.add_argument('-s', '--sensors', action='store_true')
     parser.add_argument('-m', '--mem', action='store_true')
     parser.add_argument('-n', '--network', action='store_true')
     parser.add_argument('-N', '--nfs-server', action='store_true')
@@ -40,12 +42,15 @@ def main():
     parser.add_argument('-D', '--influx-database', default='metrics')
     parser.add_argument('--graphite', default='graphite.mm:2004')
     parser.add_argument('-P', '--graphite-prefix', default='')
+
+    parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('-I', '--no-influx', action='store_true')
     parser.add_argument('-G', '--no-graphite', action='store_true')
 
     parser.add_argument('-i', '--interval', type=int, default=10)
 
     parser.add_argument('-v', '--verbose', action='store_true')
+    parser.add_argument('-V', '--verbose-graphite', action='store_true')
     parser.add_argument('--dev', action='store_true')
 
     parser.add_argument
@@ -60,6 +65,9 @@ def main():
         args.influx_database = 'dev'
         args.graphite_prefix = 'dev.'
 
+    if args.dry_run:
+        args.no_graphite = True
+        args.no_influx = True
 
     def iter_many_metrics():
 
@@ -86,6 +94,11 @@ def main():
             else:
                 for m in disks.iter_metrics():
                     yield m
+
+        if args.all or args.sensors:
+            for m in sensors.iter_metrics():
+                yield m
+
 
 
 
@@ -121,10 +134,13 @@ def main():
         for m in all_metrics:
             m.time = m.time or now
 
-        if args.verbose:
+        if args.verbose or args.verbose_graphite:
             print
             for m in all_metrics:
-                m.pprint_graphite()
+                if args.verbose:
+                    m.pprint_influx()
+                if args.verbose_graphite:
+                    m.pprint_graphite()
 
         if not args.no_influx:
             influx.send_many(args.influx, args.influx_database, all_metrics)

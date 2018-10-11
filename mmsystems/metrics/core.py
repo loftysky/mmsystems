@@ -10,9 +10,10 @@ def gethostname():
 
 class Metrics(object):
 
-    def __init__(self, influx_name, graphite_pattern=None, tags=None, fields=None, time=None):
+    def __init__(self, influx_name, graphite_base=None, tags=None, fields=None, time=None, graphite_name=None):
         self.influx_name = influx_name
-        self.graphite_pattern = graphite_pattern
+        self.graphite_base = graphite_base
+        self.graphite_name = graphite_name
         self.tags = dict(tags or {})
         self.tags.setdefault('host', gethostname())
         self.fields = dict(fields or {})
@@ -30,11 +31,15 @@ class Metrics(object):
     def iter_graphite(self, time=None, prefix='', **extra):
         if time is None:
             time = _time()
-        for key, value in self.fields.iteritems():
+        for field, value in self.fields.iteritems():
             data = extra.copy()
             data.update(self.tags)
-            basename = self.graphite_pattern.format(**data)
-            name = '{}{}.{}'.format(prefix or '', basename, key)
+            data.setdefault('field', field)
+            if self.graphite_name:
+                name = (prefix or '') + self.graphite_name.format(**data)
+            else:
+                basename = self.graphite_base.format(**data)
+                name = '{}{}.{}'.format(prefix or '', basename, field)
             yield (name, (self.time or time, value))
 
     def format_influx(self, time=None):
